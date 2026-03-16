@@ -27,6 +27,27 @@ service cloud.firestore {
           request.resource.data.spotify.importedAt is string
         ) &&
         request.resource.data.spotify.selfReportedListeningHoursPerWeek is number &&
+        request.resource.data.spotify.listeningHoursSource is string &&
+        (
+          request.resource.data.spotify.importedHistoryFileCount == null ||
+          request.resource.data.spotify.importedHistoryFileCount is number
+        ) &&
+        (
+          request.resource.data.spotify.importedHistoryRecordCount == null ||
+          request.resource.data.spotify.importedHistoryRecordCount is number
+        ) &&
+        (
+          request.resource.data.spotify.importedHoursTotal == null ||
+          request.resource.data.spotify.importedHoursTotal is number
+        ) &&
+        (
+          request.resource.data.spotify.importedAverageHoursPerWeek == null ||
+          request.resource.data.spotify.importedAverageHoursPerWeek is number
+        ) &&
+        (
+          request.resource.data.spotify.importedHistorySpanDays == null ||
+          request.resource.data.spotify.importedHistorySpanDays is number
+        ) &&
         request.resource.data.exposure.workNoiseHoursPerWeek is number &&
         request.resource.data.exposure.commuteNoiseHoursPerWeek is number &&
         request.resource.data.exposure.leisureNoiseHoursPerWeek is number &&

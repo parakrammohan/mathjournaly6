@@ -18,6 +18,12 @@ export type SurveyPayload = {
     spotifyPlan: string;
     importedAt: string | null;
     selfReportedListeningHoursPerWeek: number;
+    listeningHoursSource: string;
+    importedHistoryFileCount: number | null;
+    importedHistoryRecordCount: number | null;
+    importedHoursTotal: number | null;
+    importedAverageHoursPerWeek: number | null;
+    importedHistorySpanDays: number | null;
   };
   exposure: {
     workNoiseHoursPerWeek: number;

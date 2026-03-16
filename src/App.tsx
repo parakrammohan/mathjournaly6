@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { motion } from "motion/react";
 import { addDoc, collection } from "firebase/firestore";
 import { db } from "./firebase";
@@ -7,6 +15,7 @@ import {
   fetchSpotifyProfile,
   getSpotifyAuthUrl,
 } from "./spotify";
+import { parseSpotifyHistoryFiles, type SpotifyHistorySummary } from "./spotifyHistory";
 import type { FrequencyCheck, SurveyPayload } from "./types";
 
 type FormState = {
@@ -82,7 +91,14 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
-  const [spotifyStatus, setSpotifyStatus] = useState("Optional: import Spotify genres.");
+  const [spotifyStatus, setSpotifyStatus] = useState(
+    "Optional: import Spotify genres via API. Use Spotify data export for listening hours.",
+  );
+  const [spotifyHistorySummary, setSpotifyHistorySummary] =
+    useState<SpotifyHistorySummary | null>(null);
+  const [spotifyHistoryStatus, setSpotifyHistoryStatus] = useState(
+    "No Spotify history import yet.",
+  );
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
@@ -90,6 +106,13 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
+    const authError = params.get("error");
+
+    if (authError) {
+      setSpotifyStatus("Spotify authorization failed. Check the redirect URI in Spotify settings.");
+      window.history.replaceState({}, "", "/");
+      return;
+    }
 
     if (!code) {
       return;
@@ -105,12 +128,14 @@ function App() {
           spotifyConnected: true,
           spotifyPlan: spotifyData.spotifyPlan,
           topGenres: spotifyData.topGenres,
-          topArtists: spotifyData.topArtists,
+          topArtists:
+            current.topArtists.length > 0 ? current.topArtists : spotifyData.topArtists,
         }));
         setSpotifyStatus("Spotify genres imported.");
-        window.history.replaceState({}, "", window.location.pathname);
+        window.history.replaceState({}, "", "/");
       } catch {
         setSpotifyStatus("Spotify import failed. You can still complete the survey.");
+        window.history.replaceState({}, "", "/");
       }
     })();
   }, []);
@@ -206,6 +231,32 @@ function App() {
     }
   };
 
+  const importSpotifyHistory = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    setError("");
+
+    try {
+      const summary = await parseSpotifyHistoryFiles(event.target.files);
+      setSpotifyHistorySummary(summary);
+      setSpotifyHistoryStatus(
+        `Imported ${summary.recordCount.toLocaleString()} plays across ${summary.fileCount} file(s).`,
+      );
+      setForm((current) => ({
+        ...current,
+        topArtists: current.topArtists.length > 0 ? current.topArtists : summary.topArtists,
+      }));
+    } catch (importError) {
+      const message =
+        importError instanceof Error
+          ? importError.message
+          : "Spotify history import failed.";
+      setSpotifyHistoryStatus(message);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   const submitSurvey = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
@@ -225,6 +276,13 @@ function App() {
         spotifyPlan: form.spotifyPlan,
         importedAt: form.spotifyConnected ? new Date().toISOString() : null,
         selfReportedListeningHoursPerWeek: form.listeningHours,
+        listeningHoursSource: spotifyHistorySummary ? "spotify_export" : "self_report",
+        importedHistoryFileCount: spotifyHistorySummary?.fileCount ?? null,
+        importedHistoryRecordCount: spotifyHistorySummary?.recordCount ?? null,
+        importedHoursTotal: spotifyHistorySummary?.totalHours ?? null,
+        importedAverageHoursPerWeek:
+          spotifyHistorySummary?.averageHoursPerWeek ?? null,
+        importedHistorySpanDays: spotifyHistorySummary?.spanDays ?? null,
       },
       exposure: {
         workNoiseHoursPerWeek: form.workNoiseHours,
@@ -260,6 +318,8 @@ function App() {
         headphoneType: initialState.headphoneType,
         environmentNoise: initialState.environmentNoise,
       });
+      setSpotifyHistorySummary(null);
+      setSpotifyHistoryStatus("No Spotify history import yet.");
       stopTone();
     } catch {
       setError("Submission failed. Check your Firebase config and Firestore rules.");
@@ -284,9 +344,9 @@ function App() {
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
             This form combines listening patterns, noise exposure, and a lightweight
-            high-frequency hearing check. Spotify import is optional and only used for
-            genres and profile context. Listening hours remain self-reported because
-            Spotify does not expose them through its API.
+            high-frequency hearing check. Spotify API import is optional for genres and
+            artists. Listening hours can be imported from a Spotify data export, because
+            the Web API does not provide total listening time.
           </p>
         </header>
 
@@ -327,7 +387,7 @@ function App() {
 
             <Section
               title="Spotify"
-              description="Optional import for top artists and genres. The survey still works without Spotify."
+              description="Use the API for genres, and Spotify's exported history JSON for actual listening-time totals."
             >
               <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
                 <div>
@@ -344,15 +404,62 @@ function App() {
                   Connect Spotify
                 </button>
               </div>
-              <RangeField
-                label="Self-reported listening hours per week"
-                value={form.listeningHours}
-                min={0}
-                max={80}
-                step={1}
-                suffix="hrs"
-                onChange={(value) => updateField("listeningHours", value)}
-              />
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">
+                      Spotify listening history import
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">{spotifyHistoryStatus}</p>
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center justify-center rounded-full bg-blue-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600">
+                    Import JSON
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      multiple
+                      onChange={(event) => void importSpotifyHistory(event)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                <p className="mt-3 text-xs leading-5 text-slate-500">
+                  Accepts Spotify streaming history export files such as
+                  `StreamingHistory_music_*.json` or `endsong_*.json`. This is the
+                  reliable path for listening hours. Spotify does not provide age in its
+                  Web API, so age remains survey-entered.
+                </p>
+              </div>
+
+              {spotifyHistorySummary ? (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <MetricCard
+                    title="Imported total listening"
+                    value={`${spotifyHistorySummary.totalHours} hrs`}
+                    description="Computed from Spotify history files."
+                  />
+                  <MetricCard
+                    title="Average listening per week"
+                    value={`${spotifyHistorySummary.averageHoursPerWeek} hrs`}
+                    description={`Estimated across ${spotifyHistorySummary.spanDays} days of history.`}
+                  />
+                  <MetricCard
+                    title="History records"
+                    value={spotifyHistorySummary.recordCount.toLocaleString()}
+                    description="Playable events parsed from the uploaded files."
+                  />
+                </div>
+              ) : (
+                <RangeField
+                  label="Fallback self-reported listening hours per week"
+                  value={form.listeningHours}
+                  min={0}
+                  max={80}
+                  step={1}
+                  suffix="hrs"
+                  onChange={(value) => updateField("listeningHours", value)}
+                />
+              )}
             </Section>
 
             <Section
