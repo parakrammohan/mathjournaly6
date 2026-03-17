@@ -18,7 +18,7 @@ type Message = {
 
 type Draft = {
   ageRange: string;
-  biologicalSex: string;
+  gender: string;
   listeningDeviceClass: string;
   listeningDeviceModel: string;
   phoneModel: string;
@@ -38,7 +38,7 @@ type Draft = {
 };
 
 const ageOptions = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
-const biologicalSexOptions = ["Female", "Male", "Intersex", "Prefer not to say"];
+const genderOptions = ["Female", "Male", "Non-binary", "Other", "Prefer not to say"];
 const perceptionTests = [
   {
     id: "laurel_yanny",
@@ -62,7 +62,7 @@ const perceptionTests = [
 
 const initialDraft: Draft = {
   ageRange: "",
-  biologicalSex: "",
+  gender: "",
   listeningDeviceClass: "",
   listeningDeviceModel: "",
   phoneModel: "",
@@ -84,8 +84,9 @@ const initialDraft: Draft = {
 const steps = [
   "intro",
   "age",
-  "biologicalSex",
-  "listeningDevice",
+  "gender",
+  "listeningDeviceClass",
+  "listeningDeviceModel",
   "phoneModel",
   "tinnitus",
   "listening",
@@ -99,7 +100,7 @@ type Step = (typeof steps)[number];
 function summarizeDraft(draft: Draft) {
   return [
     draft.ageRange && `age ${draft.ageRange}`,
-    draft.biologicalSex && `biological sex ${draft.biologicalSex}`,
+    draft.gender && `gender ${draft.gender}`,
     draft.listeningDeviceClass &&
       `device ${draft.listeningDeviceClass}${
         draft.listeningDeviceModel ? ` ${draft.listeningDeviceModel}` : ""
@@ -274,7 +275,7 @@ export default function Page() {
       await addDoc(collection(db, "surveyResponses"), {
         createdAt: new Date().toISOString(),
         ageRange: draft.ageRange,
-        biologicalSex: draft.biologicalSex,
+        gender: draft.gender,
         listeningDevice: {
           deviceClass: draft.listeningDeviceClass,
           model: draft.listeningDeviceModel.trim(),
@@ -422,13 +423,13 @@ export default function Page() {
               </Card>
             ) : null}
 
-            {currentStep === "biologicalSex" ? (
-              <Card title="Biological sex">
+            {currentStep === "gender" ? (
+              <Card title="Gender">
                 <ChipGroup
-                  options={biologicalSexOptions}
-                  value={draft.biologicalSex}
+                  options={genderOptions}
+                  value={draft.gender}
                   onSelect={(value) => {
-                    const nextDraft = { ...draft, biologicalSex: value };
+                    const nextDraft = { ...draft, gender: value };
                     setDraft(nextDraft);
                     void advance(value, nextDraft);
                   }}
@@ -436,9 +437,8 @@ export default function Page() {
               </Card>
             ) : null}
 
-            {currentStep === "listeningDevice" ? (
+            {currentStep === "listeningDeviceClass" ? (
               <Card title="Listening device">
-                <FieldLabel>Listening device class</FieldLabel>
                 <ChipGroup
                   options={[
                     "Earbuds",
@@ -452,24 +452,29 @@ export default function Page() {
                     setDraft((current) => ({ ...current, listeningDeviceClass: value }))
                   }
                 />
-                {draft.listeningDeviceClass ? (
-                  <>
-                    <FieldLabel>Listening device model</FieldLabel>
-                    <TextEntry
-                      value={draft.listeningDeviceModel}
-                      placeholder="AirPods Pro 2"
-                      onChange={(value) =>
-                        setDraft((current) => ({ ...current, listeningDeviceModel: value }))
-                      }
-                    />
-                  </>
-                ) : null}
                 <button
-                  onClick={() => void advance("Listening device recorded")}
+                  onClick={() => void advance(draft.listeningDeviceClass)}
                   style={primaryButton}
-                  disabled={
-                    !draft.listeningDeviceClass || !draft.listeningDeviceModel.trim()
+                  disabled={!draft.listeningDeviceClass}
+                >
+                  Continue
+                </button>
+              </Card>
+            ) : null}
+
+            {currentStep === "listeningDeviceModel" ? (
+              <Card title={`What model ${draft.listeningDeviceClass.toLowerCase()} is it?`}>
+                <TextEntry
+                  value={draft.listeningDeviceModel}
+                  placeholder="AirPods Pro 2"
+                  onChange={(value) =>
+                    setDraft((current) => ({ ...current, listeningDeviceModel: value }))
                   }
+                />
+                <button
+                  onClick={() => void advance(draft.listeningDeviceModel)}
+                  style={primaryButton}
+                  disabled={!draft.listeningDeviceModel.trim()}
                 >
                   Continue
                 </button>
@@ -668,14 +673,6 @@ function Card({
       {children}
     </section>
   );
-}
-
-function FieldLabel({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <p style={{ margin: "2px 0 -4px", color: "#44403c", fontWeight: 600 }}>{children}</p>;
 }
 
 function ChipGroup({

@@ -6,7 +6,7 @@ import type { SurveyPayload } from "./types";
 
 type Answers = {
   ageRange: string;
-  biologicalSex: string;
+  gender: string;
   listeningDeviceClass: string;
   listeningDeviceModel: string;
   listeningHoursPerDay: number;
@@ -20,8 +20,9 @@ type Answers = {
 
 type StoryStep =
   | "ageRange"
-  | "biologicalSex"
-  | "listeningDevice"
+  | "gender"
+  | "listeningDeviceClass"
+  | "listeningDeviceModel"
   | "phoneModel"
   | "tinnitus"
   | "listeningHoursPerDay"
@@ -32,8 +33,9 @@ type StoryStep =
 
 const steps: Array<{ id: StoryStep; label: string }> = [
   { id: "ageRange", label: "Age" },
-  { id: "biologicalSex", label: "Sex" },
-  { id: "listeningDevice", label: "Device" },
+  { id: "gender", label: "Gender" },
+  { id: "listeningDeviceClass", label: "Device" },
+  { id: "listeningDeviceModel", label: "Model" },
   { id: "phoneModel", label: "Phone" },
   { id: "tinnitus", label: "Tinnitus" },
   { id: "listeningHoursPerDay", label: "Hours" },
@@ -45,7 +47,7 @@ const steps: Array<{ id: StoryStep; label: string }> = [
 
 const initialAnswers: Answers = {
   ageRange: "",
-  biologicalSex: "",
+  gender: "",
   listeningDeviceClass: "",
   listeningDeviceModel: "",
   listeningHoursPerDay: 2,
@@ -59,7 +61,7 @@ const initialAnswers: Answers = {
 
 const choiceGroups = {
   ageRange: ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
-  biologicalSex: ["Female", "Male", "Intersex", "Prefer not to say"],
+  gender: ["Female", "Male", "Non-binary", "Other", "Prefer not to say"],
   listeningDeviceClass: [
     "Earbuds",
     "Over-ear headphones",
@@ -95,7 +97,7 @@ function App() {
   const summaryRows = useMemo(
     () => [
       { label: "Age range", value: answers.ageRange || "Not set" },
-      { label: "Biological sex", value: answers.biologicalSex || "Not set" },
+      { label: "Gender", value: answers.gender || "Not set" },
       {
         label: "Listening device",
         value:
@@ -250,7 +252,7 @@ function App() {
     const payload: SurveyPayload = {
       createdAt: new Date().toISOString(),
       ageRange: finalAnswers.ageRange,
-      biologicalSex: finalAnswers.biologicalSex,
+      gender: finalAnswers.gender,
       listeningDevice: {
         deviceClass: finalAnswers.listeningDeviceClass,
         model: finalAnswers.listeningDeviceModel.trim(),
@@ -426,54 +428,55 @@ function StoryCard({
     );
   }
 
-  if (step === "biologicalSex") {
+  if (step === "gender") {
     return (
       <QuestionShell
-        title="What is your biological sex?"
-        description="Pick the closest match."
+        title="What is your gender?"
+        description=""
       >
         <ChoiceGrid
-          options={choiceGroups.biologicalSex}
-          value={answers.biologicalSex}
-          onSelect={(value) => onChooseAndAdvance("biologicalSex", value)}
+          options={choiceGroups.gender}
+          value={answers.gender}
+          onSelect={(value) => onChooseAndAdvance("gender", value)}
         />
       </QuestionShell>
     );
   }
 
-  if (step === "listeningDevice") {
+  if (step === "listeningDeviceClass") {
     return (
       <QuestionShell
         title="What listening device are you using?"
-        description="Choose the device class, then add the model."
+        description=""
       >
-        <div className="space-y-6">
-          <div className="space-y-3">
-            <FieldLabel>Listening device class</FieldLabel>
-            <ChoiceGrid
-              options={choiceGroups.listeningDeviceClass}
-              value={answers.listeningDeviceClass}
-              onSelect={(value) => onSetAnswer("listeningDeviceClass", value)}
-            />
-          </div>
+        <ChoiceGrid
+          options={choiceGroups.listeningDeviceClass}
+          value={answers.listeningDeviceClass}
+          onSelect={(value) => onChooseAndAdvance("listeningDeviceClass", value)}
+        />
+      </QuestionShell>
+    );
+  }
 
-          {answers.listeningDeviceClass ? (
-            <div className="space-y-3">
-              <FieldLabel>Listening device model</FieldLabel>
-              <TextEntryBlock
-                value={answers.listeningDeviceModel}
-                placeholder="AirPods Pro 2"
-                onChange={(value) => onSetAnswer("listeningDeviceModel", value)}
-              />
-            </div>
-          ) : null}
-        </div>
+  if (step === "listeningDeviceModel") {
+    const deviceLabel = answers.listeningDeviceClass
+      ? answers.listeningDeviceClass.toLowerCase()
+      : "device";
+
+    return (
+      <QuestionShell
+        title={`What model ${deviceLabel} is it?`}
+        description=""
+      >
+        <TextEntryBlock
+          value={answers.listeningDeviceModel}
+          placeholder="AirPods Pro 2"
+          onChange={(value) => onSetAnswer("listeningDeviceModel", value)}
+        />
         <FooterNav
           onBack={onBack}
           onNext={onNext}
-          nextDisabled={
-            !answers.listeningDeviceClass || !answers.listeningDeviceModel.trim()
-          }
+          nextDisabled={!answers.listeningDeviceModel.trim()}
         />
       </QuestionShell>
     );
@@ -483,7 +486,7 @@ function StoryCard({
     return (
       <QuestionShell
         title="What phone model are you using?"
-        description="Use the phone that will play the test sound."
+        description=""
       >
         <TextEntryBlock
           value={answers.phoneModel}
@@ -503,7 +506,7 @@ function StoryCard({
     return (
       <QuestionShell
         title="Do you have tinnitus?"
-        description="Choose yes or no."
+        description=""
       >
         <ChoiceGrid
           options={choiceGroups.tinnitus}
@@ -644,24 +647,18 @@ function QuestionShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto pr-1">
+    <div className="flex min-h-0 flex-1 flex-col justify-center">
       <h2 className="max-w-2xl text-[clamp(2rem,8vw,3.6rem)] font-semibold tracking-tight text-white">
         {title}
       </h2>
-      <p className="mt-3 max-w-lg text-[15px] leading-6 text-white/52 md:text-base md:leading-7">
-        {description}
-      </p>
+      {description ? (
+        <p className="mt-3 max-w-lg text-[15px] leading-6 text-white/52 md:text-base md:leading-7">
+          {description}
+        </p>
+      ) : null}
       <div className="mt-6 md:mt-8">{children}</div>
     </div>
   );
-}
-
-function FieldLabel({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <p className="text-sm font-medium text-white/80">{children}</p>;
 }
 
 function ChoiceGrid({

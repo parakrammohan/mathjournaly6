@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 
 const fallbackMessages: Record<string, string> = {
   intro: "We will keep this quick. Start with your age range.",
-  age: "What is your biological sex?",
-  biologicalSex: "What listening device are you using for this test?",
-  listeningDevice: "What phone model are you using?",
+  age: "What is your gender?",
+  gender: "What listening device are you using for this test?",
+  listeningDeviceClass: "What model is it?",
   phoneModel: "Do you have tinnitus?",
   tinnitus: "Now give your average music listening time per day.",
   listening: "How loud does your average day feel, on a scale from calm to noisy?",
