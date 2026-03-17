@@ -2,7 +2,7 @@
 
 :root {
   color: #1c1917;
-  background: #f8fafc;
+  background: #0a0a0a;
   font-family:
     "Satoshi",
     "Avenir Next",
@@ -20,6 +20,7 @@ html {
 
 body {
   margin: 0;
+  background: #0a0a0a;
 }
 
 button,

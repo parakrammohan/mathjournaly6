@@ -250,10 +250,10 @@ function App() {
   };
 
   return (
-    <main className="min-h-[100dvh] bg-[#0a0a0a] text-white">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-2xl items-center justify-center px-3 py-3 md:px-6 md:py-6">
-        <section className="flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden rounded-[28px] bg-[#111111] p-4 shadow-[0_30px_120px_-50px_rgba(0,0,0,0.9)] md:h-[min(860px,92vh)] md:rounded-[36px] md:p-6">
-          <div className="mb-4 flex items-center gap-1.5">
+    <main className="min-h-[100svh] bg-[#0a0a0a] text-white">
+      <div className="mx-auto flex min-h-[100svh] w-full max-w-2xl items-center justify-center px-3 py-3 md:px-6 md:py-6">
+        <section className="flex h-[calc(100svh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-[28px] bg-[#111111] px-4 pb-4 pt-3 shadow-[0_30px_120px_-50px_rgba(0,0,0,0.9)] md:h-[min(860px,92svh)] md:rounded-[36px] md:p-6">
+          <div className="mb-3 flex items-center gap-1.5">
             {steps.map((step, index) => (
               <button
                 key={step.id}
@@ -267,7 +267,7 @@ function App() {
             ))}
           </div>
 
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-white/32">
                 Can you hear me?
@@ -278,7 +278,7 @@ function App() {
             </p>
           </div>
 
-          <div className="flex flex-1 items-center justify-center overflow-hidden">
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentStep}
@@ -286,7 +286,7 @@ function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -14 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
-                className="flex h-full w-full flex-1 flex-col justify-center py-2"
+                className="flex h-full min-h-0 w-full flex-1 flex-col justify-center py-1"
               >
                 <StoryCard
                   step={currentStep}
@@ -347,16 +347,16 @@ function StoryCard({
   if (submitted || submitting) {
     return (
       <div className="flex flex-1 flex-col justify-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-white md:text-5xl">
+        <h2 className="text-[clamp(2rem,8vw,3.6rem)] font-semibold tracking-tight text-white">
           {submitted ? "Done" : "Saving..."}
         </h2>
-        <p className="mt-4 max-w-xl text-base leading-7 text-white/55">
+        <p className="mt-3 max-w-xl text-[15px] leading-6 text-white/55 md:text-base md:leading-7">
           {submitted
             ? "Your response has been saved."
             : "Submitting your response now."}
         </p>
         {!submitted && !submitting ? (
-          <div className="mt-8 space-y-2 text-sm text-white/42">
+          <div className="mt-6 space-y-2 text-sm text-white/42">
             {summaryRows.map((row) => (
               <div key={row.label} className="flex items-center justify-between gap-4">
                 <span>{row.label}</span>
@@ -367,7 +367,7 @@ function StoryCard({
         ) : null}
         {error ? <p className="mt-5 text-sm text-rose-400">{error}</p> : null}
         {!submitted && !submitting ? (
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-3">
             <ActionButton tone="ghost" onClick={onBack}>
               Back
             </ActionButton>
@@ -559,12 +559,14 @@ function QuestionShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-1 flex-col justify-center">
-      <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-white md:text-5xl">
+    <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto pr-1">
+      <h2 className="max-w-2xl text-[clamp(2rem,8vw,3.6rem)] font-semibold tracking-tight text-white">
         {title}
       </h2>
-      <p className="mt-3 max-w-lg text-base leading-7 text-white/52">{description}</p>
-      <div className="mt-8">{children}</div>
+      <p className="mt-3 max-w-lg text-[15px] leading-6 text-white/52 md:text-base md:leading-7">
+        {description}
+      </p>
+      <div className="mt-6 md:mt-8">{children}</div>
     </div>
   );
 }
@@ -609,8 +611,8 @@ function SliderBlock({
 }) {
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <span className="text-2xl font-semibold text-white">
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <span className="text-[clamp(1.5rem,6vw,2rem)] font-semibold text-white">
           {Number.isInteger(value) ? value.toLocaleString() : value} {suffix}
         </span>
       </div>
@@ -639,7 +641,7 @@ function FooterNav({
   onNext: () => void;
 }) {
   return (
-    <div className="mt-6 flex flex-wrap gap-3">
+      <div className="mt-5 flex flex-wrap gap-3">
       <ActionButton tone="ghost" onClick={onBack}>
         Back
       </ActionButton>
@@ -663,7 +665,7 @@ function AnswerButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[22px] border px-5 py-5 text-left text-base font-medium transition md:px-6 md:py-6 ${
+      className={`rounded-[22px] border px-4 py-4 text-left text-[15px] font-medium transition md:px-6 md:py-6 md:text-base ${
         active
           ? "border-white bg-white text-black"
           : "border-white/10 bg-white/4 text-white hover:border-white/30 hover:bg-white/8"
@@ -697,7 +699,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-full px-5 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`rounded-full px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
       {children}
     </button>
