@@ -2,9 +2,12 @@ export type SurveyPayload = {
   createdAt: string;
   ageRange: string;
   gender: string;
+  listeningDevice: {
+    deviceClass: string;
+    model: string;
+  };
   listeningHoursPerDay: number;
   volumeLevel: number;
-  headphoneModel: string;
   phoneModel: string;
   tinnitus: string;
   maxFrequency: number;

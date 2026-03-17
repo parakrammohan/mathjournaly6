@@ -19,7 +19,8 @@ type Message = {
 type Draft = {
   ageRange: string;
   gender: string;
-  headphoneModel: string;
+  listeningDeviceClass: string;
+  listeningDeviceModel: string;
   phoneModel: string;
   tinnitus: string;
   dailyListeningHours: number;
@@ -62,7 +63,8 @@ const perceptionTests = [
 const initialDraft: Draft = {
   ageRange: "",
   gender: "",
-  headphoneModel: "",
+  listeningDeviceClass: "",
+  listeningDeviceModel: "",
   phoneModel: "",
   tinnitus: "",
   dailyListeningHours: 2.5,
@@ -82,10 +84,7 @@ const initialDraft: Draft = {
 const steps = [
   "intro",
   "age",
-  "gender",
-  "headphoneModel",
-  "phoneModel",
-  "tinnitus",
+  "setup",
   "listening",
   "noise",
   "protection",
@@ -98,7 +97,10 @@ function summarizeDraft(draft: Draft) {
   return [
     draft.ageRange && `age ${draft.ageRange}`,
     draft.gender && `gender ${draft.gender}`,
-    draft.headphoneModel && `headphones ${draft.headphoneModel}`,
+    draft.listeningDeviceClass &&
+      `device ${draft.listeningDeviceClass}${
+        draft.listeningDeviceModel ? ` ${draft.listeningDeviceModel}` : ""
+      }`,
     draft.phoneModel && `phone ${draft.phoneModel}`,
     draft.tinnitus && `tinnitus ${draft.tinnitus}`,
     `music ${draft.dailyListeningHours}h/day`,
@@ -270,7 +272,10 @@ export default function Page() {
         createdAt: new Date().toISOString(),
         ageRange: draft.ageRange,
         gender: draft.gender,
-        headphoneModel: draft.headphoneModel.trim(),
+        listeningDevice: {
+          deviceClass: draft.listeningDeviceClass,
+          model: draft.listeningDeviceModel.trim(),
+        },
         phoneModel: draft.phoneModel.trim(),
         tinnitus: draft.tinnitus,
         spotify: {
@@ -414,65 +419,74 @@ export default function Page() {
               </Card>
             ) : null}
 
-            {currentStep === "gender" ? (
-              <Card title="Gender">
+            {currentStep === "setup" ? (
+              <Card title="About you and your setup">
+                <FieldLabel>What is your gender?</FieldLabel>
                 <ChipGroup
                   options={genderOptions}
                   value={draft.gender}
-                  onSelect={(value) => {
-                    const nextDraft = { ...draft, gender: value };
-                    setDraft(nextDraft);
-                    void advance(value, nextDraft);
-                  }}
+                  onSelect={(value) =>
+                    setDraft((current) => ({ ...current, gender: value }))
+                  }
                 />
-              </Card>
-            ) : null}
 
-            {currentStep === "headphoneModel" ? (
-              <Card title="Headphone model">
-                <TextEntry
-                  value={draft.headphoneModel}
-                  placeholder="AirPods Pro 2"
-                  onChange={(value) => setDraft((current) => ({ ...current, headphoneModel: value }))}
+                <FieldLabel>What class of listening device are you using?</FieldLabel>
+                <ChipGroup
+                  options={[
+                    "Earbuds",
+                    "Over-ear headphones",
+                    "On-ear / open-back",
+                    "Speakers",
+                    "Other",
+                  ]}
+                  value={draft.listeningDeviceClass}
+                  onSelect={(value) =>
+                    setDraft((current) => ({ ...current, listeningDeviceClass: value }))
+                  }
                 />
-                <button
-                  onClick={() => void advance(draft.headphoneModel)}
-                  style={primaryButton}
-                  disabled={!draft.headphoneModel.trim()}
-                >
-                  Continue
-                </button>
-              </Card>
-            ) : null}
 
-            {currentStep === "phoneModel" ? (
-              <Card title="Phone model">
+                {draft.listeningDeviceClass ? (
+                  <>
+                    <FieldLabel>Listening device model</FieldLabel>
+                    <TextEntry
+                      value={draft.listeningDeviceModel}
+                      placeholder="AirPods Pro 2"
+                      onChange={(value) =>
+                        setDraft((current) => ({ ...current, listeningDeviceModel: value }))
+                      }
+                    />
+                  </>
+                ) : null}
+
+                <FieldLabel>What phone model are you using?</FieldLabel>
                 <TextEntry
                   value={draft.phoneModel}
                   placeholder="iPhone 15"
                   onChange={(value) => setDraft((current) => ({ ...current, phoneModel: value }))}
                 />
-                <button
-                  onClick={() => void advance(draft.phoneModel)}
-                  style={primaryButton}
-                  disabled={!draft.phoneModel.trim()}
-                >
-                  Continue
-                </button>
-              </Card>
-            ) : null}
 
-            {currentStep === "tinnitus" ? (
-              <Card title="Tinnitus">
+                <FieldLabel>Do you have tinnitus?</FieldLabel>
                 <ChipGroup
                   options={["Yes", "No"]}
                   value={draft.tinnitus}
-                  onSelect={(value) => {
-                    const nextDraft = { ...draft, tinnitus: value };
-                    setDraft(nextDraft);
-                    void advance(value, nextDraft);
-                  }}
+                  onSelect={(value) =>
+                    setDraft((current) => ({ ...current, tinnitus: value }))
+                  }
                 />
+
+                <button
+                  onClick={() => void advance("Setup recorded")}
+                  style={primaryButton}
+                  disabled={
+                    !draft.gender ||
+                    !draft.listeningDeviceClass ||
+                    !draft.listeningDeviceModel.trim() ||
+                    !draft.phoneModel.trim() ||
+                    !draft.tinnitus
+                  }
+                >
+                  Continue
+                </button>
               </Card>
             ) : null}
 
@@ -637,6 +651,14 @@ function Card({
       {children}
     </section>
   );
+}
+
+function FieldLabel({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <p style={{ margin: "2px 0 -4px", color: "#44403c", fontWeight: 600 }}>{children}</p>;
 }
 
 function ChipGroup({

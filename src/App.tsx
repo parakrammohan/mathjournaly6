@@ -7,9 +7,10 @@ import type { SurveyPayload } from "./types";
 type Answers = {
   ageRange: string;
   gender: string;
+  listeningDeviceClass: string;
+  listeningDeviceModel: string;
   listeningHoursPerDay: number;
   volumeLevel: number;
-  headphoneModel: string;
   phoneModel: string;
   tinnitus: string;
   maxFrequency: number;
@@ -19,24 +20,18 @@ type Answers = {
 
 type StoryStep =
   | "ageRange"
-  | "gender"
+  | "setup"
   | "listeningHoursPerDay"
   | "volumeLevel"
-  | "headphoneModel"
-  | "phoneModel"
-  | "tinnitus"
   | "maxFrequency"
   | "yannyLaurel"
   | "greenNeedleBrainstorm";
 
 const steps: Array<{ id: StoryStep; label: string }> = [
   { id: "ageRange", label: "Age" },
-  { id: "gender", label: "Gender" },
+  { id: "setup", label: "Setup" },
   { id: "listeningHoursPerDay", label: "Hours" },
   { id: "volumeLevel", label: "Volume" },
-  { id: "headphoneModel", label: "Headphones" },
-  { id: "phoneModel", label: "Phone" },
-  { id: "tinnitus", label: "Tinnitus" },
   { id: "maxFrequency", label: "Frequency" },
   { id: "yannyLaurel", label: "Yanny / Laurel" },
   { id: "greenNeedleBrainstorm", label: "Green Needle / Brainstorm" },
@@ -45,9 +40,10 @@ const steps: Array<{ id: StoryStep; label: string }> = [
 const initialAnswers: Answers = {
   ageRange: "",
   gender: "",
+  listeningDeviceClass: "",
+  listeningDeviceModel: "",
   listeningHoursPerDay: 2,
   volumeLevel: 65,
-  headphoneModel: "",
   phoneModel: "",
   tinnitus: "",
   maxFrequency: 15000,
@@ -58,6 +54,13 @@ const initialAnswers: Answers = {
 const choiceGroups = {
   ageRange: ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
   gender: ["Prefer not to say", "Female", "Male", "Non-binary", "Other"],
+  listeningDeviceClass: [
+    "Earbuds",
+    "Over-ear headphones",
+    "On-ear / open-back",
+    "Speakers",
+    "Other",
+  ],
   tinnitus: ["Yes", "No"],
   yannyLaurel: ["Yanny", "Laurel"],
   greenNeedleBrainstorm: ["Green Needle", "Brainstorm"],
@@ -87,9 +90,15 @@ function App() {
     () => [
       { label: "Age range", value: answers.ageRange || "Not set" },
       { label: "Gender", value: answers.gender || "Not set" },
+      {
+        label: "Listening device",
+        value:
+          answers.listeningDeviceClass && answers.listeningDeviceModel
+            ? `${answers.listeningDeviceClass} · ${answers.listeningDeviceModel}`
+            : answers.listeningDeviceClass || "Not set",
+      },
       { label: "Listening", value: `${answers.listeningHoursPerDay} hrs/day` },
       { label: "Volume", value: `${answers.volumeLevel}%` },
-      { label: "Headphone model", value: answers.headphoneModel || "Not set" },
       { label: "Phone model", value: answers.phoneModel || "Not set" },
       { label: "Tinnitus", value: answers.tinnitus || "Not set" },
       { label: "Max frequency", value: `${answers.maxFrequency.toLocaleString()} Hz` },
@@ -236,9 +245,12 @@ function App() {
       createdAt: new Date().toISOString(),
       ageRange: finalAnswers.ageRange,
       gender: finalAnswers.gender,
+      listeningDevice: {
+        deviceClass: finalAnswers.listeningDeviceClass,
+        model: finalAnswers.listeningDeviceModel.trim(),
+      },
       listeningHoursPerDay: finalAnswers.listeningHoursPerDay,
       volumeLevel: finalAnswers.volumeLevel,
-      headphoneModel: finalAnswers.headphoneModel.trim(),
       phoneModel: finalAnswers.phoneModel.trim(),
       tinnitus: finalAnswers.tinnitus,
       maxFrequency: finalAnswers.maxFrequency,
@@ -408,16 +420,70 @@ function StoryCard({
     );
   }
 
-  if (step === "gender") {
+  if (step === "setup") {
     return (
       <QuestionShell
-        title="What gender should we record?"
-        description="Pick the closest match."
+        title="About you and your setup"
+        description="Keep this to the device you are using for the hearing test."
       >
-        <ChoiceGrid
-          options={choiceGroups.gender}
-          value={answers.gender}
-          onSelect={(value) => onChooseAndAdvance("gender", value)}
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <FieldLabel>What is your gender?</FieldLabel>
+            <ChoiceGrid
+              options={choiceGroups.gender}
+              value={answers.gender}
+              onSelect={(value) => onSetAnswer("gender", value)}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <FieldLabel>What class of listening device are you using?</FieldLabel>
+            <ChoiceGrid
+              options={choiceGroups.listeningDeviceClass}
+              value={answers.listeningDeviceClass}
+              onSelect={(value) => onSetAnswer("listeningDeviceClass", value)}
+            />
+          </div>
+
+          {answers.listeningDeviceClass ? (
+            <div className="space-y-3">
+              <FieldLabel>Listening device model</FieldLabel>
+              <TextEntryBlock
+                value={answers.listeningDeviceModel}
+                placeholder="AirPods Pro 2"
+                onChange={(value) => onSetAnswer("listeningDeviceModel", value)}
+              />
+            </div>
+          ) : null}
+
+          <div className="space-y-3">
+            <FieldLabel>What phone model are you using?</FieldLabel>
+            <TextEntryBlock
+              value={answers.phoneModel}
+              placeholder="iPhone 15"
+              onChange={(value) => onSetAnswer("phoneModel", value)}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <FieldLabel>Do you have tinnitus?</FieldLabel>
+            <ChoiceGrid
+              options={choiceGroups.tinnitus}
+              value={answers.tinnitus}
+              onSelect={(value) => onSetAnswer("tinnitus", value)}
+            />
+          </div>
+        </div>
+        <FooterNav
+          onBack={onBack}
+          onNext={onNext}
+          nextDisabled={
+            !answers.gender ||
+            !answers.listeningDeviceClass ||
+            !answers.listeningDeviceModel.trim() ||
+            !answers.phoneModel.trim() ||
+            !answers.tinnitus
+          }
         />
       </QuestionShell>
     );
@@ -457,61 +523,6 @@ function StoryCard({
           onChange={(value) => onSetAnswer("volumeLevel", value)}
         />
         <FooterNav onBack={onBack} onNext={onNext} />
-      </QuestionShell>
-    );
-  }
-
-  if (step === "headphoneModel") {
-    return (
-      <QuestionShell
-        title="What headphone model are you using?"
-        description="Use the exact model if you know it."
-      >
-        <TextEntryBlock
-          value={answers.headphoneModel}
-          placeholder="AirPods Pro 2"
-          onChange={(value) => onSetAnswer("headphoneModel", value)}
-        />
-        <FooterNav
-          onBack={onBack}
-          onNext={onNext}
-          nextDisabled={!answers.headphoneModel.trim()}
-        />
-      </QuestionShell>
-    );
-  }
-
-  if (step === "phoneModel") {
-    return (
-      <QuestionShell
-        title="What phone model are you using?"
-        description="This helps interpret the playback setup."
-      >
-        <TextEntryBlock
-          value={answers.phoneModel}
-          placeholder="iPhone 15"
-          onChange={(value) => onSetAnswer("phoneModel", value)}
-        />
-        <FooterNav
-          onBack={onBack}
-          onNext={onNext}
-          nextDisabled={!answers.phoneModel.trim()}
-        />
-      </QuestionShell>
-    );
-  }
-
-  if (step === "tinnitus") {
-    return (
-      <QuestionShell
-        title="Do you have tinnitus?"
-        description="Choose yes or no."
-      >
-        <ChoiceGrid
-          options={choiceGroups.tinnitus}
-          value={answers.tinnitus}
-          onSelect={(value) => onChooseAndAdvance("tinnitus", value)}
-        />
       </QuestionShell>
     );
   }
@@ -618,6 +629,14 @@ function QuestionShell({
       <div className="mt-6 md:mt-8">{children}</div>
     </div>
   );
+}
+
+function FieldLabel({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <p className="text-sm font-medium text-white/80">{children}</p>;
 }
 
 function ChoiceGrid({

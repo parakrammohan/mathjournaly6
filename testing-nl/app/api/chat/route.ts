@@ -2,11 +2,8 @@ import { NextResponse } from "next/server";
 
 const fallbackMessages: Record<string, string> = {
   intro: "We will keep this quick. Start with your age range.",
-  age: "Good. What gender should we record for the stats?",
-  gender: "Which headphone model are you using for this test?",
-  headphoneModel: "Which phone model are you using?",
-  phoneModel: "Do you have tinnitus, yes or no?",
-  tinnitus: "Now give your average music listening time per day.",
+  age: "Now tell us about your listening setup.",
+  setup: "Now give your average music listening time per day.",
   listening: "How loud does your average day feel, on a scale from calm to noisy?",
   noise: "How often do you actively protect your ears when things get loud?",
   protection:
