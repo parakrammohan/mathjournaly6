@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const fallbackMessages: Record<string, string> = {
-  intro: "We will keep this quick. Start with your age range.",
+  intro: "We will keep this quick. Start with your age.",
   age: "What is your gender?",
   gender: "What listening device are you using for this test?",
   listeningDeviceClass: "What model is it?",

@@ -1,6 +1,6 @@
 export type SurveyPayload = {
   createdAt: string;
-  ageRange: string;
+  age: number;
   gender: string;
   listeningDevice: {
     deviceClass: string;

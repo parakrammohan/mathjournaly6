@@ -17,7 +17,7 @@ type Message = {
 };
 
 type Draft = {
-  ageRange: string;
+  age: number | null;
   gender: string;
   listeningDeviceClass: string;
   listeningDeviceModel: string;
@@ -37,7 +37,6 @@ type Draft = {
   perception: Record<string, string>;
 };
 
-const ageOptions = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
 const genderOptions = ["Female", "Male", "Non-binary", "Other", "Prefer not to say"];
 const perceptionTests = [
   {
@@ -61,7 +60,7 @@ const perceptionTests = [
 ];
 
 const initialDraft: Draft = {
-  ageRange: "",
+  age: null,
   gender: "",
   listeningDeviceClass: "",
   listeningDeviceModel: "",
@@ -99,7 +98,7 @@ type Step = (typeof steps)[number];
 
 function summarizeDraft(draft: Draft) {
   return [
-    draft.ageRange && `age ${draft.ageRange}`,
+    draft.age !== null && `age ${draft.age}`,
     draft.gender && `gender ${draft.gender}`,
     draft.listeningDeviceClass &&
       `device ${draft.listeningDeviceClass}${
@@ -274,7 +273,7 @@ export default function Page() {
     try {
       await addDoc(collection(db, "surveyResponses"), {
         createdAt: new Date().toISOString(),
-        ageRange: draft.ageRange,
+        age: draft.age,
         gender: draft.gender,
         listeningDevice: {
           deviceClass: draft.listeningDeviceClass,
@@ -411,15 +410,22 @@ export default function Page() {
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {currentStep === "intro" || currentStep === "age" ? (
               <Card title="Age">
-                <ChipGroup
-                  options={ageOptions}
-                  value={draft.ageRange}
-                  onSelect={(value) => {
-                    const nextDraft = { ...draft, ageRange: value };
-                    setDraft(nextDraft);
-                    void advance(value, nextDraft);
-                  }}
+                <StepperInput
+                  value={draft.age}
+                  min={1}
+                  max={120}
+                  onChange={(value) => setDraft((current) => ({ ...current, age: value }))}
                 />
+                <button
+                  onClick={() => {
+                    const nextDraft = { ...draft };
+                    void advance(String(nextDraft.age), nextDraft);
+                  }}
+                  style={primaryButton}
+                  disabled={draft.age === null}
+                >
+                  Continue
+                </button>
               </Card>
             ) : null}
 
@@ -732,6 +738,70 @@ function RangeInput({
         onChange={(event) => onChange(Number(event.target.value))}
         style={{ width: "100%", accentColor: "#0f766e" }}
       />
+    </div>
+  );
+}
+
+function StepperInput({
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  value: number | null;
+  min: number;
+  max: number;
+  onChange: (value: number | null) => void;
+}) {
+  const setClamped = (next: number) => onChange(Math.min(max, Math.max(min, next)));
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <button
+          onClick={() => setClamped((value ?? min) - 1)}
+          style={secondaryButton}
+          disabled={value !== null && value <= min}
+        >
+          -
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          value={value ?? ""}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+
+            if (nextValue === "") {
+              onChange(null);
+              return;
+            }
+
+            setClamped(Number(nextValue));
+          }}
+          style={{
+            width: "100%",
+            borderRadius: 18,
+            border: "1px solid #d6d3d1",
+            background: "#fff",
+            color: "#1c1917",
+            padding: "12px 14px",
+            textAlign: "center",
+            fontSize: 24,
+            fontWeight: 600,
+          }}
+        />
+        <button
+          onClick={() => setClamped((value ?? min - 1) + 1)}
+          style={secondaryButton}
+          disabled={value !== null && value >= max}
+        >
+          +
+        </button>
+      </div>
+      <p style={{ margin: 0, color: "#57534e", textAlign: "center" }}>years</p>
     </div>
   );
 }

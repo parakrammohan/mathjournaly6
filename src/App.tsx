@@ -5,7 +5,7 @@ import { db } from "./firebase";
 import type { SurveyPayload } from "./types";
 
 type Answers = {
-  ageRange: string;
+  age: number | null;
   gender: string;
   listeningDeviceClass: string;
   listeningDeviceModel: string;
@@ -19,7 +19,7 @@ type Answers = {
 };
 
 type StoryStep =
-  | "ageRange"
+  | "age"
   | "gender"
   | "listeningDeviceClass"
   | "listeningDeviceModel"
@@ -32,7 +32,7 @@ type StoryStep =
   | "greenNeedleBrainstorm";
 
 const steps: Array<{ id: StoryStep; label: string }> = [
-  { id: "ageRange", label: "Age" },
+  { id: "age", label: "Age" },
   { id: "gender", label: "Gender" },
   { id: "listeningDeviceClass", label: "Device" },
   { id: "listeningDeviceModel", label: "Model" },
@@ -46,7 +46,7 @@ const steps: Array<{ id: StoryStep; label: string }> = [
 ];
 
 const initialAnswers: Answers = {
-  ageRange: "",
+  age: null,
   gender: "",
   listeningDeviceClass: "",
   listeningDeviceModel: "",
@@ -60,7 +60,6 @@ const initialAnswers: Answers = {
 };
 
 const choiceGroups = {
-  ageRange: ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
   gender: ["Female", "Male", "Non-binary", "Other", "Prefer not to say"],
   listeningDeviceClass: [
     "Earbuds",
@@ -96,7 +95,7 @@ function App() {
 
   const summaryRows = useMemo(
     () => [
-      { label: "Age range", value: answers.ageRange || "Not set" },
+      { label: "Age", value: answers.age === null ? "Not set" : `${answers.age}` },
       { label: "Gender", value: answers.gender || "Not set" },
       {
         label: "Listening device",
@@ -251,7 +250,7 @@ function App() {
 
     const payload: SurveyPayload = {
       createdAt: new Date().toISOString(),
-      ageRange: finalAnswers.ageRange,
+      age: finalAnswers.age as number,
       gender: finalAnswers.gender,
       listeningDevice: {
         deviceClass: finalAnswers.listeningDeviceClass,
@@ -413,17 +412,19 @@ function StoryCard({
     );
   }
 
-  if (step === "ageRange") {
+  if (step === "age") {
     return (
       <QuestionShell
         title="How old are you?"
-        description="Pick the closest range."
+        description=""
       >
-        <ChoiceGrid
-          options={choiceGroups.ageRange}
-          value={answers.ageRange}
-          onSelect={(value) => onChooseAndAdvance("ageRange", value)}
+        <StepperField
+          value={answers.age}
+          min={1}
+          max={120}
+          onChange={(value) => onSetAnswer("age", value)}
         />
+        <FooterNav onBack={onBack} onNext={onNext} nextDisabled={answers.age === null} />
       </QuestionShell>
     );
   }
@@ -719,6 +720,60 @@ function SliderBlock({
         <span>{min.toLocaleString()}</span>
         <span>{max.toLocaleString()}</span>
       </div>
+    </div>
+  );
+}
+
+function StepperField({
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  value: number | null;
+  min: number;
+  max: number;
+  onChange: (value: number | null) => void;
+}) {
+  const setClamped = (next: number) => onChange(Math.min(max, Math.max(min, next)));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <ActionButton
+          tone="ghost"
+          onClick={() => setClamped((value ?? min) - 1)}
+          disabled={value !== null && value <= min}
+        >
+          -
+        </ActionButton>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          value={value ?? ""}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+
+            if (nextValue === "") {
+              onChange(null);
+              return;
+            }
+
+            setClamped(Number(nextValue));
+          }}
+          className="w-full rounded-[20px] border border-white/10 bg-white/4 px-4 py-4 text-center text-[1.6rem] font-semibold text-white outline-none transition focus:border-white/30 focus:bg-white/6"
+        />
+        <ActionButton
+          tone="ghost"
+          onClick={() => setClamped((value ?? min - 1) + 1)}
+          disabled={value !== null && value >= max}
+        >
+          +
+        </ActionButton>
+      </div>
+      <p className="text-center text-sm text-white/40">years</p>
     </div>
   );
 }
