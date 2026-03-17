@@ -13,6 +13,7 @@ The production app focuses on:
 - Spotify genres, artists, tracks, and plan via PKCE
 - daily listening estimate, optionally improved by Spotify history export JSON
 - softer daily-noise prompts
+- headphone model, phone model, and tinnitus status
 - a simplified frequency slider test
 - three short auditory ambiguity checks
 

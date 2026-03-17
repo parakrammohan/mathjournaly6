@@ -19,6 +19,9 @@ type Message = {
 type Draft = {
   ageRange: string;
   gender: string;
+  headphoneModel: string;
+  phoneModel: string;
+  tinnitus: string;
   dailyListeningHours: number;
   noiseLoad: number;
   protectionHabit: number;
@@ -59,6 +62,9 @@ const perceptionTests = [
 const initialDraft: Draft = {
   ageRange: "",
   gender: "",
+  headphoneModel: "",
+  phoneModel: "",
+  tinnitus: "",
   dailyListeningHours: 2.5,
   noiseLoad: 35,
   protectionHabit: 40,
@@ -73,8 +79,36 @@ const initialDraft: Draft = {
   perception: {},
 };
 
-const steps = ["intro", "age", "gender", "listening", "noise", "protection", "hearing", "complete"] as const;
+const steps = [
+  "intro",
+  "age",
+  "gender",
+  "headphoneModel",
+  "phoneModel",
+  "tinnitus",
+  "listening",
+  "noise",
+  "protection",
+  "hearing",
+  "complete",
+] as const;
 type Step = (typeof steps)[number];
+
+function summarizeDraft(draft: Draft) {
+  return [
+    draft.ageRange && `age ${draft.ageRange}`,
+    draft.gender && `gender ${draft.gender}`,
+    draft.headphoneModel && `headphones ${draft.headphoneModel}`,
+    draft.phoneModel && `phone ${draft.phoneModel}`,
+    draft.tinnitus && `tinnitus ${draft.tinnitus}`,
+    `music ${draft.dailyListeningHours}h/day`,
+    `noise ${draft.noiseLoad}/100`,
+    `protection ${draft.protectionHabit}%`,
+    draft.savedLimitHz && `frequency ${draft.savedLimitHz}Hz`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
 
 export default function Page() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -91,17 +125,7 @@ export default function Page() {
   const currentStep = steps[stepIndex];
 
   const summary = useMemo(
-    () =>
-      [
-        draft.ageRange && `age ${draft.ageRange}`,
-        draft.gender && `gender ${draft.gender}`,
-        `music ${draft.dailyListeningHours}h/day`,
-        `noise ${draft.noiseLoad}/100`,
-        `protection ${draft.protectionHabit}%`,
-        draft.savedLimitHz && `frequency ${draft.savedLimitHz}Hz`,
-      ]
-        .filter(Boolean)
-        .join(", "),
+    () => summarizeDraft(draft),
     [draft],
   );
 
@@ -164,11 +188,11 @@ export default function Page() {
     setMessages((current) => [...current, { role: "assistant", text: data.message }]);
   };
 
-  const advance = async (userText: string) => {
+  const advance = async (userText: string, nextDraft: Draft = draft) => {
     const nextIndex = Math.min(stepIndex + 1, steps.length - 1);
     setMessages((current) => [...current, { role: "user", text: userText }]);
     setStepIndex(nextIndex);
-    await requestMessage(steps[nextIndex], summary);
+    await requestMessage(steps[nextIndex], summarizeDraft(nextDraft));
   };
 
   const connectSpotify = async () => {
@@ -246,6 +270,9 @@ export default function Page() {
         createdAt: new Date().toISOString(),
         ageRange: draft.ageRange,
         gender: draft.gender,
+        headphoneModel: draft.headphoneModel.trim(),
+        phoneModel: draft.phoneModel.trim(),
+        tinnitus: draft.tinnitus,
         spotify: {
           connected: draft.spotifyConnected,
           spotifyPlan: draft.spotifyPlan,
@@ -264,7 +291,6 @@ export default function Page() {
         hearing: {
           frequencyCheck: {
             savedLimitHz: draft.savedLimitHz,
-            headphoneType: "testing-widget",
           },
           perception: Object.entries(draft.perception).map(([id, answer]) => ({
             id,
@@ -380,8 +406,9 @@ export default function Page() {
                   options={ageOptions}
                   value={draft.ageRange}
                   onSelect={(value) => {
-                    setDraft((current) => ({ ...current, ageRange: value }));
-                    void advance(value);
+                    const nextDraft = { ...draft, ageRange: value };
+                    setDraft(nextDraft);
+                    void advance(value, nextDraft);
                   }}
                 />
               </Card>
@@ -393,8 +420,57 @@ export default function Page() {
                   options={genderOptions}
                   value={draft.gender}
                   onSelect={(value) => {
-                    setDraft((current) => ({ ...current, gender: value }));
-                    void advance(value);
+                    const nextDraft = { ...draft, gender: value };
+                    setDraft(nextDraft);
+                    void advance(value, nextDraft);
+                  }}
+                />
+              </Card>
+            ) : null}
+
+            {currentStep === "headphoneModel" ? (
+              <Card title="Headphone model">
+                <TextEntry
+                  value={draft.headphoneModel}
+                  placeholder="AirPods Pro 2"
+                  onChange={(value) => setDraft((current) => ({ ...current, headphoneModel: value }))}
+                />
+                <button
+                  onClick={() => void advance(draft.headphoneModel)}
+                  style={primaryButton}
+                  disabled={!draft.headphoneModel.trim()}
+                >
+                  Continue
+                </button>
+              </Card>
+            ) : null}
+
+            {currentStep === "phoneModel" ? (
+              <Card title="Phone model">
+                <TextEntry
+                  value={draft.phoneModel}
+                  placeholder="iPhone 15"
+                  onChange={(value) => setDraft((current) => ({ ...current, phoneModel: value }))}
+                />
+                <button
+                  onClick={() => void advance(draft.phoneModel)}
+                  style={primaryButton}
+                  disabled={!draft.phoneModel.trim()}
+                >
+                  Continue
+                </button>
+              </Card>
+            ) : null}
+
+            {currentStep === "tinnitus" ? (
+              <Card title="Tinnitus">
+                <ChipGroup
+                  options={["Yes", "No"]}
+                  value={draft.tinnitus}
+                  onSelect={(value) => {
+                    const nextDraft = { ...draft, tinnitus: value };
+                    setDraft(nextDraft);
+                    void advance(value, nextDraft);
                   }}
                 />
               </Card>
@@ -451,7 +527,10 @@ export default function Page() {
             {currentStep === "hearing" ? (
               <>
                 <Card title="Frequency test">
-                  <p style={smallText}>Play the tone, slide up until it disappears, then save that point.</p>
+                  <p style={smallText}>
+                    Place your phone 20 cm away from your ear in a quiet room. Use max
+                    volume, then move the slider until you can stop hearing the sound.
+                  </p>
                   <RangeInput
                     value={frequency}
                     min={8000}
@@ -618,6 +697,33 @@ function RangeInput({
         style={{ width: "100%", accentColor: "#0f766e" }}
       />
     </div>
+  );
+}
+
+function TextEntry({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+      style={{
+        width: "100%",
+        borderRadius: 18,
+        border: "1px solid #d6d3d1",
+        background: "#fff",
+        color: "#1c1917",
+        padding: "12px 14px",
+      }}
+    />
   );
 }
 

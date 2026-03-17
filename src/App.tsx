@@ -6,10 +6,12 @@ import type { SurveyPayload } from "./types";
 
 type Answers = {
   ageRange: string;
+  gender: string;
   listeningHoursPerDay: number;
   volumeLevel: number;
-  headphoneType: string;
-  yearsOfExposure: number;
+  headphoneModel: string;
+  phoneModel: string;
+  tinnitus: string;
   maxFrequency: number;
   yannyLaurel: string;
   greenNeedleBrainstorm: string;
@@ -17,20 +19,24 @@ type Answers = {
 
 type StoryStep =
   | "ageRange"
+  | "gender"
   | "listeningHoursPerDay"
   | "volumeLevel"
-  | "headphoneType"
-  | "yearsOfExposure"
+  | "headphoneModel"
+  | "phoneModel"
+  | "tinnitus"
   | "maxFrequency"
   | "yannyLaurel"
   | "greenNeedleBrainstorm";
 
 const steps: Array<{ id: StoryStep; label: string }> = [
   { id: "ageRange", label: "Age" },
+  { id: "gender", label: "Gender" },
   { id: "listeningHoursPerDay", label: "Hours" },
   { id: "volumeLevel", label: "Volume" },
-  { id: "headphoneType", label: "Headphones" },
-  { id: "yearsOfExposure", label: "Years" },
+  { id: "headphoneModel", label: "Headphones" },
+  { id: "phoneModel", label: "Phone" },
+  { id: "tinnitus", label: "Tinnitus" },
   { id: "maxFrequency", label: "Frequency" },
   { id: "yannyLaurel", label: "Yanny / Laurel" },
   { id: "greenNeedleBrainstorm", label: "Green Needle / Brainstorm" },
@@ -38,10 +44,12 @@ const steps: Array<{ id: StoryStep; label: string }> = [
 
 const initialAnswers: Answers = {
   ageRange: "",
+  gender: "",
   listeningHoursPerDay: 2,
   volumeLevel: 65,
-  headphoneType: "",
-  yearsOfExposure: 3,
+  headphoneModel: "",
+  phoneModel: "",
+  tinnitus: "",
   maxFrequency: 15000,
   yannyLaurel: "",
   greenNeedleBrainstorm: "",
@@ -49,7 +57,8 @@ const initialAnswers: Answers = {
 
 const choiceGroups = {
   ageRange: ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
-  headphoneType: ["Earbuds", "Over-ear Headphones", "On-ear/Open-back", "Speakers"],
+  gender: ["Prefer not to say", "Female", "Male", "Non-binary", "Other"],
+  tinnitus: ["Yes", "No"],
   yannyLaurel: ["Yanny", "Laurel"],
   greenNeedleBrainstorm: ["Green Needle", "Brainstorm"],
 } as const;
@@ -77,10 +86,12 @@ function App() {
   const summaryRows = useMemo(
     () => [
       { label: "Age range", value: answers.ageRange || "Not set" },
+      { label: "Gender", value: answers.gender || "Not set" },
       { label: "Listening", value: `${answers.listeningHoursPerDay} hrs/day` },
       { label: "Volume", value: `${answers.volumeLevel}%` },
-      { label: "Headphones", value: answers.headphoneType || "Not set" },
-      { label: "Exposure", value: `${answers.yearsOfExposure} years` },
+      { label: "Headphone model", value: answers.headphoneModel || "Not set" },
+      { label: "Phone model", value: answers.phoneModel || "Not set" },
+      { label: "Tinnitus", value: answers.tinnitus || "Not set" },
       { label: "Max frequency", value: `${answers.maxFrequency.toLocaleString()} Hz` },
       { label: "Yanny / Laurel", value: answers.yannyLaurel || "Not set" },
       {
@@ -224,10 +235,12 @@ function App() {
     const payload: SurveyPayload = {
       createdAt: new Date().toISOString(),
       ageRange: finalAnswers.ageRange,
+      gender: finalAnswers.gender,
       listeningHoursPerDay: finalAnswers.listeningHoursPerDay,
       volumeLevel: finalAnswers.volumeLevel,
-      headphoneType: finalAnswers.headphoneType,
-      yearsOfExposure: finalAnswers.yearsOfExposure,
+      headphoneModel: finalAnswers.headphoneModel.trim(),
+      phoneModel: finalAnswers.phoneModel.trim(),
+      tinnitus: finalAnswers.tinnitus,
       maxFrequency: finalAnswers.maxFrequency,
       yannyLaurel: finalAnswers.yannyLaurel,
       greenNeedleBrainstorm: finalAnswers.greenNeedleBrainstorm,
@@ -395,6 +408,21 @@ function StoryCard({
     );
   }
 
+  if (step === "gender") {
+    return (
+      <QuestionShell
+        title="What gender should we record?"
+        description="Pick the closest match."
+      >
+        <ChoiceGrid
+          options={choiceGroups.gender}
+          value={answers.gender}
+          onSelect={(value) => onChooseAndAdvance("gender", value)}
+        />
+      </QuestionShell>
+    );
+  }
+
   if (step === "listeningHoursPerDay") {
     return (
       <QuestionShell
@@ -433,36 +461,57 @@ function StoryCard({
     );
   }
 
-  if (step === "headphoneType") {
+  if (step === "headphoneModel") {
     return (
       <QuestionShell
-        title="What do you usually listen with?"
-        description="Pick the closest match."
+        title="What headphone model are you using?"
+        description="Use the exact model if you know it."
       >
-        <ChoiceGrid
-          options={choiceGroups.headphoneType}
-          value={answers.headphoneType}
-          onSelect={(value) => onChooseAndAdvance("headphoneType", value)}
+        <TextEntryBlock
+          value={answers.headphoneModel}
+          placeholder="AirPods Pro 2"
+          onChange={(value) => onSetAnswer("headphoneModel", value)}
+        />
+        <FooterNav
+          onBack={onBack}
+          onNext={onNext}
+          nextDisabled={!answers.headphoneModel.trim()}
         />
       </QuestionShell>
     );
   }
 
-  if (step === "yearsOfExposure") {
+  if (step === "phoneModel") {
     return (
       <QuestionShell
-        title="How long has that been your normal?"
-        description="Count the years of roughly similar habits."
+        title="What phone model are you using?"
+        description="This helps interpret the playback setup."
       >
-        <SliderBlock
-          value={answers.yearsOfExposure}
-          min={0}
-          max={40}
-          step={1}
-          suffix="years"
-          onChange={(value) => onSetAnswer("yearsOfExposure", value)}
+        <TextEntryBlock
+          value={answers.phoneModel}
+          placeholder="iPhone 15"
+          onChange={(value) => onSetAnswer("phoneModel", value)}
         />
-        <FooterNav onBack={onBack} onNext={onNext} />
+        <FooterNav
+          onBack={onBack}
+          onNext={onNext}
+          nextDisabled={!answers.phoneModel.trim()}
+        />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "tinnitus") {
+    return (
+      <QuestionShell
+        title="Do you have tinnitus?"
+        description="Choose yes or no."
+      >
+        <ChoiceGrid
+          options={choiceGroups.tinnitus}
+          value={answers.tinnitus}
+          onSelect={(value) => onChooseAndAdvance("tinnitus", value)}
+        />
       </QuestionShell>
     );
   }
@@ -470,8 +519,8 @@ function StoryCard({
   if (step === "maxFrequency") {
     return (
       <QuestionShell
-        title="Slide until you can't hear it"
-        description="Put your device at max volume first, then stop where it disappears."
+        title="When does the tone disappear?"
+        description="Place your phone 20 cm away from your ear in a quiet room and move the slider until you can stop hearing the sound. Use max volume."
       >
         <div className="mb-5 inline-flex w-fit items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70">
           <VolumeIcon />
@@ -633,19 +682,41 @@ function SliderBlock({
   );
 }
 
+function TextEntryBlock({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+      className="w-full rounded-[20px] border border-white/10 bg-white/4 px-4 py-4 text-[15px] text-white outline-none transition placeholder:text-white/24 focus:border-white/30 focus:bg-white/6 md:text-base"
+    />
+  );
+}
+
 function FooterNav({
   onBack,
   onNext,
+  nextDisabled,
 }: {
   onBack: () => void;
   onNext: () => void;
+  nextDisabled?: boolean;
 }) {
   return (
-      <div className="mt-5 flex flex-wrap gap-3">
+    <div className="mt-5 flex flex-wrap gap-3">
       <ActionButton tone="ghost" onClick={onBack}>
         Back
       </ActionButton>
-      <ActionButton tone="primary" onClick={onNext}>
+      <ActionButton tone="primary" onClick={onNext} disabled={nextDisabled}>
         Continue
       </ActionButton>
     </div>

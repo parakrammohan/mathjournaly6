@@ -3,10 +3,14 @@ import { NextResponse } from "next/server";
 const fallbackMessages: Record<string, string> = {
   intro: "We will keep this quick. Start with your age range.",
   age: "Good. What gender should we record for the stats?",
-  gender: "Now give your average music listening time per day.",
+  gender: "Which headphone model are you using for this test?",
+  headphoneModel: "Which phone model are you using?",
+  phoneModel: "Do you have tinnitus, yes or no?",
+  tinnitus: "Now give your average music listening time per day.",
   listening: "How loud does your average day feel, on a scale from calm to noisy?",
   noise: "How often do you actively protect your ears when things get loud?",
-  protection: "Run the simple hearing checks, then submit when ready.",
+  protection:
+    "Place your phone 20 cm away from your ear in a quiet room, use max volume, then run the hearing checks.",
   complete: "All set. Submit the anonymous response whenever you are ready.",
 };
 
@@ -25,7 +29,7 @@ export async function POST(request: Request) {
   }
 
   const prompt = `
-You are writing one short assistant message for a maths statistics survey.
+You are writing one short assistant message for an audio and hearing survey.
 Tone: calm, natural, efficient, light.
 Current step: ${body.step}
 Known summary: ${body.summary ?? "none"}
