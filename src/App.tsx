@@ -6,7 +6,7 @@ import type { SurveyPayload } from "./types";
 
 type Answers = {
   ageRange: string;
-  gender: string;
+  biologicalSex: string;
   listeningDeviceClass: string;
   listeningDeviceModel: string;
   listeningHoursPerDay: number;
@@ -20,7 +20,10 @@ type Answers = {
 
 type StoryStep =
   | "ageRange"
-  | "setup"
+  | "biologicalSex"
+  | "listeningDevice"
+  | "phoneModel"
+  | "tinnitus"
   | "listeningHoursPerDay"
   | "volumeLevel"
   | "maxFrequency"
@@ -29,7 +32,10 @@ type StoryStep =
 
 const steps: Array<{ id: StoryStep; label: string }> = [
   { id: "ageRange", label: "Age" },
-  { id: "setup", label: "Setup" },
+  { id: "biologicalSex", label: "Sex" },
+  { id: "listeningDevice", label: "Device" },
+  { id: "phoneModel", label: "Phone" },
+  { id: "tinnitus", label: "Tinnitus" },
   { id: "listeningHoursPerDay", label: "Hours" },
   { id: "volumeLevel", label: "Volume" },
   { id: "maxFrequency", label: "Frequency" },
@@ -39,7 +45,7 @@ const steps: Array<{ id: StoryStep; label: string }> = [
 
 const initialAnswers: Answers = {
   ageRange: "",
-  gender: "",
+  biologicalSex: "",
   listeningDeviceClass: "",
   listeningDeviceModel: "",
   listeningHoursPerDay: 2,
@@ -53,7 +59,7 @@ const initialAnswers: Answers = {
 
 const choiceGroups = {
   ageRange: ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
-  gender: ["Prefer not to say", "Female", "Male", "Non-binary", "Other"],
+  biologicalSex: ["Female", "Male", "Intersex", "Prefer not to say"],
   listeningDeviceClass: [
     "Earbuds",
     "Over-ear headphones",
@@ -89,7 +95,7 @@ function App() {
   const summaryRows = useMemo(
     () => [
       { label: "Age range", value: answers.ageRange || "Not set" },
-      { label: "Gender", value: answers.gender || "Not set" },
+      { label: "Biological sex", value: answers.biologicalSex || "Not set" },
       {
         label: "Listening device",
         value:
@@ -244,7 +250,7 @@ function App() {
     const payload: SurveyPayload = {
       createdAt: new Date().toISOString(),
       ageRange: finalAnswers.ageRange,
-      gender: finalAnswers.gender,
+      biologicalSex: finalAnswers.biologicalSex,
       listeningDevice: {
         deviceClass: finalAnswers.listeningDeviceClass,
         model: finalAnswers.listeningDeviceModel.trim(),
@@ -420,24 +426,30 @@ function StoryCard({
     );
   }
 
-  if (step === "setup") {
+  if (step === "biologicalSex") {
     return (
       <QuestionShell
-        title="About you and your setup"
-        description="Keep this to the device you are using for the hearing test."
+        title="What is your biological sex?"
+        description="Pick the closest match."
+      >
+        <ChoiceGrid
+          options={choiceGroups.biologicalSex}
+          value={answers.biologicalSex}
+          onSelect={(value) => onChooseAndAdvance("biologicalSex", value)}
+        />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "listeningDevice") {
+    return (
+      <QuestionShell
+        title="What listening device are you using?"
+        description="Choose the device class, then add the model."
       >
         <div className="space-y-6">
           <div className="space-y-3">
-            <FieldLabel>What is your gender?</FieldLabel>
-            <ChoiceGrid
-              options={choiceGroups.gender}
-              value={answers.gender}
-              onSelect={(value) => onSetAnswer("gender", value)}
-            />
-          </div>
-
-          <div className="space-y-3">
-            <FieldLabel>What class of listening device are you using?</FieldLabel>
+            <FieldLabel>Listening device class</FieldLabel>
             <ChoiceGrid
               options={choiceGroups.listeningDeviceClass}
               value={answers.listeningDeviceClass}
@@ -455,35 +467,48 @@ function StoryCard({
               />
             </div>
           ) : null}
-
-          <div className="space-y-3">
-            <FieldLabel>What phone model are you using?</FieldLabel>
-            <TextEntryBlock
-              value={answers.phoneModel}
-              placeholder="iPhone 15"
-              onChange={(value) => onSetAnswer("phoneModel", value)}
-            />
-          </div>
-
-          <div className="space-y-3">
-            <FieldLabel>Do you have tinnitus?</FieldLabel>
-            <ChoiceGrid
-              options={choiceGroups.tinnitus}
-              value={answers.tinnitus}
-              onSelect={(value) => onSetAnswer("tinnitus", value)}
-            />
-          </div>
         </div>
         <FooterNav
           onBack={onBack}
           onNext={onNext}
           nextDisabled={
-            !answers.gender ||
-            !answers.listeningDeviceClass ||
-            !answers.listeningDeviceModel.trim() ||
-            !answers.phoneModel.trim() ||
-            !answers.tinnitus
+            !answers.listeningDeviceClass || !answers.listeningDeviceModel.trim()
           }
+        />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "phoneModel") {
+    return (
+      <QuestionShell
+        title="What phone model are you using?"
+        description="Use the phone that will play the test sound."
+      >
+        <TextEntryBlock
+          value={answers.phoneModel}
+          placeholder="iPhone 15"
+          onChange={(value) => onSetAnswer("phoneModel", value)}
+        />
+        <FooterNav
+          onBack={onBack}
+          onNext={onNext}
+          nextDisabled={!answers.phoneModel.trim()}
+        />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "tinnitus") {
+    return (
+      <QuestionShell
+        title="Do you have tinnitus?"
+        description="Choose yes or no."
+      >
+        <ChoiceGrid
+          options={choiceGroups.tinnitus}
+          value={answers.tinnitus}
+          onSelect={(value) => onChooseAndAdvance("tinnitus", value)}
         />
       </QuestionShell>
     );

@@ -9,7 +9,7 @@ This repo now contains two apps:
 
 The production app focuses on:
 
-- age and gender
+- age and biological sex
 - Spotify genres, artists, tracks, and plan via PKCE
 - daily listening estimate, optionally improved by Spotify history export JSON
 - softer daily-noise prompts
