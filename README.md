@@ -1,24 +1,43 @@
 # Audio & Hearing Survey
 
-A lightweight React survey for collecting anonymous hearing-related data:
+This repo now contains two apps:
 
-- demographic bands
-- optional Spotify top genres and artists via Spotify PKCE
-- Spotify export import for listening hours
-- structured weekly loud-noise exposure
-- hearing quality and day-to-day burden
-- browser-based high-frequency audibility check
+- production survey at the repo root: a simplified Vite app for the real anonymous survey
+- testing survey in `testing-nl/`: a separate Next.js app with a natural-language conversational shell powered by Gemini Flash on the server
 
-## Why listening hours are self-reported
+## Production survey
 
-Spotify's Web API does not expose total listening hours or age. This app therefore uses two Spotify paths:
+The production app focuses on:
 
-- Web API import for top genres and artists
-- Spotify streaming-history JSON import for listening-time totals
+- age and gender
+- Spotify genres, artists, tracks, and plan via PKCE
+- daily listening estimate, optionally improved by Spotify history export JSON
+- softer daily-noise prompts
+- a simplified frequency slider test
+- three short auditory ambiguity checks
 
-If a participant does not have their export files, the survey falls back to self-reported listening hours.
+Audio clips are bundled locally in `public/audio/` and were sourced from Indiana University's auditory ambiguity demo:
 
-## Local setup
+- https://pc.cogs.indiana.edu/auditoryambiguity/
+
+## Firestore-driven section toggles
+
+The production survey reads `surveyConfig/production` from Firestore to decide which sections to show. If the document is missing, the app falls back to the hardcoded defaults in [src/surveyConfig.ts](/Users/parakrammohan/Downloads/journal/src/surveyConfig.ts).
+
+Suggested document contents:
+
+```json
+{
+  "showSpotify": true,
+  "showNoise": true,
+  "showFrequency": true,
+  "showPerception": true
+}
+```
+
+A copy is included in [survey-config.production.json](/Users/parakrammohan/Downloads/journal/survey-config.production.json).
+
+## Root app setup
 
 1. Install dependencies:
 
@@ -26,60 +45,53 @@ If a participant does not have their export files, the survey falls back to self
 npm install
 ```
 
-2. Copy the environment template and fill it in:
+2. Ensure `.env` contains your Firebase and Spotify settings.
 
-```bash
-cp .env.example .env
-```
-
-3. Start the app:
+3. Start the production survey:
 
 ```bash
 npm run dev
 ```
 
-## Firebase setup
+4. Build it:
 
-1. Create a Firebase project and enable Firestore.
-2. Add your web app config to `.env`.
-3. Deploy rules:
+```bash
+npm run build
+```
+
+## Firebase
+
+The included rules do two things:
+
+- allow anonymous create-only writes to `surveyResponses`
+- allow public reads of `surveyConfig/*`
+
+Deploy them with:
 
 ```bash
 firebase deploy --only firestore:rules
 ```
 
-4. Deploy hosting:
+## Vercel and Firebase Hosting
 
-```bash
-npm run build
-firebase deploy --only hosting
-```
+The production survey remains a static Vite build:
 
-The included rules make `surveyResponses` write-only from the client and block reads, updates, and deletes.
+- build command: `npm run build`
+- output directory: `dist`
 
-## Vercel setup
+For Spotify local development, the root app currently uses:
 
-1. Import the repo into Vercel.
-2. Add the same `VITE_...` environment variables in the Vercel project settings.
-3. Set `VITE_SPOTIFY_REDIRECT_URI` to your deployed callback URL, for example `https://your-app.vercel.app/spotify/callback`.
-4. Build command: `npm run build`
-5. Output directory: `dist`
+- `http://127.0.0.1:5173/spotify/callback`
 
-## Spotify setup
+For deployed production, set `VITE_SPOTIFY_REDIRECT_URI` to your HTTPS callback URL.
 
-1. Create a Spotify app in the Spotify Developer Dashboard.
-2. Add allowed redirect URIs for local dev and any deployed domains. For local development, register `http://localhost:5173/spotify/callback`.
-3. Set `VITE_SPOTIFY_CLIENT_ID` and `VITE_SPOTIFY_REDIRECT_URI`.
+## Testing app
 
-## Importing listening hours
+The experimental natural-language version lives in [testing-nl](/Users/parakrammohan/Downloads/journal/testing-nl).
 
-For real listening-time data, ask participants to upload their Spotify streaming-history export JSON files in the survey. The app parses files such as `StreamingHistory_music_*.json` and `endsong_*.json` and computes:
+- framework: Next.js
+- Gemini usage: server-side in `app/api/chat/route.ts`
+- local env template: `testing-nl/.env.example`
+- local Spotify redirect example: `http://127.0.0.1:3000`
 
-- total listening hours in the uploaded history
-- average hours per week across the uploaded time span
-- top artists from the uploaded history
-
-## Notes
-
-- The high-frequency check depends on browser audio support, headphones, and device output limits.
-- This is a screening-oriented survey, not a clinical hearing evaluation.
+The Gemini key must stay server-side. Do not move it into a `NEXT_PUBLIC_` variable.

@@ -18,14 +18,14 @@ const toBase64Url = (buffer: ArrayBuffer) =>
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 
-export const createCodeChallenge = async (verifier: string) => {
+const createCodeChallenge = async (verifier: string) => {
   const data = new TextEncoder().encode(verifier);
   const digest = await crypto.subtle.digest("SHA-256", data);
   return toBase64Url(digest);
 };
 
 const resolveSpotifyRedirectUri = () => {
-  const configuredRedirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI;
+  const configuredRedirectUri = process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI;
 
   if (!configuredRedirectUri) {
     throw new Error("Spotify redirect URI is missing.");
@@ -40,11 +40,11 @@ const resolveSpotifyRedirectUri = () => {
 };
 
 export const getSpotifyAuthUrl = async () => {
-  const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+  const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID;
   const redirectUri = resolveSpotifyRedirectUri();
 
   if (!clientId || !redirectUri) {
-    throw new Error("Spotify environment variables are missing.");
+    throw new Error("Spotify env vars are missing.");
   }
 
   const verifier = randomString(64);
@@ -64,7 +64,7 @@ export const getSpotifyAuthUrl = async () => {
 };
 
 export const exchangeSpotifyCode = async (code: string) => {
-  const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+  const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID;
   const redirectUri = resolveSpotifyRedirectUri();
   const verifier = sessionStorage.getItem("spotify_code_verifier");
 
@@ -76,9 +76,7 @@ export const exchangeSpotifyCode = async (code: string) => {
 
   const response = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: clientId,
       grant_type: "authorization_code",
@@ -111,28 +109,22 @@ export const fetchSpotifyProfile = async (accessToken: string) => {
 
   if (!profileResponse.ok || !artistsResponse.ok || !tracksResponse.ok) {
     throw new Error(
-      `Spotify profile fetch failed: profile=${profileResponse.status} artists=${artistsResponse.status} tracks=${tracksResponse.status}`,
+      `Spotify fetch failed: profile=${profileResponse.status} artists=${artistsResponse.status} tracks=${tracksResponse.status}`,
     );
   }
 
   const profile = (await profileResponse.json()) as { product?: string };
-  const topArtists = (await artistsResponse.json()) as {
+  const artists = (await artistsResponse.json()) as {
     items: Array<{ name: string; genres: string[] }>;
   };
-  const topTracks = (await tracksResponse.json()) as {
+  const tracks = (await tracksResponse.json()) as {
     items: Array<{ name: string }>;
   };
 
-  const artists = topArtists.items.map((artist) => artist.name);
-  const genres = Array.from(
-    new Set(topArtists.items.flatMap((artist) => artist.genres)),
-  ).slice(0, 10);
-  const tracks = topTracks.items.map((track) => track.name);
-
   return {
     spotifyPlan: profile.product ?? "unknown",
-    topArtists: artists,
-    topGenres: genres,
-    topTracks: tracks,
+    topGenres: Array.from(new Set(artists.items.flatMap((item) => item.genres))).slice(0, 10),
+    topArtists: artists.items.map((item) => item.name),
+    topTracks: tracks.items.map((item) => item.name),
   };
 };

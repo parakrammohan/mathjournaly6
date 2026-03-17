@@ -1,11 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --accent: #1d4ed8;
-  color: #0f172a;
+  color: #1c1917;
   background: #f8fafc;
   font-family:
-    "Instrument Sans",
+    "Satoshi",
     "Avenir Next",
     "Segoe UI",
     sans-serif;
@@ -25,7 +24,6 @@ body {
 
 button,
 input,
-select,
-textarea {
+select {
   font: inherit;
 }

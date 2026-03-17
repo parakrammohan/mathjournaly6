@@ -3,6 +3,7 @@ export type SpotifyHistorySummary = {
   recordCount: number;
   totalHours: number;
   averageHoursPerWeek: number;
+  averageHoursPerDay: number;
   spanDays: number;
   topArtists: string[];
 };
@@ -81,6 +82,7 @@ export const parseSpotifyHistoryFiles = async (
       : 0;
   const spanDays = Number(Math.max(1, spanDaysRaw).toFixed(1));
   const averageHoursPerWeek = Number(((totalHours * 7) / spanDays).toFixed(1));
+  const averageHoursPerDay = Number((totalHours / spanDays).toFixed(1));
   const topArtists = [...artistCounts.entries()]
     .sort((left, right) => right[1] - left[1])
     .slice(0, 8)
@@ -91,6 +93,7 @@ export const parseSpotifyHistoryFiles = async (
     recordCount,
     totalHours,
     averageHoursPerWeek,
+    averageHoursPerDay,
     spanDays,
     topArtists,
   };

@@ -1,809 +1,598 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type FormEvent,
-  type ReactNode,
-} from "react";
-import { motion } from "motion/react";
-import { addDoc, collection } from "firebase/firestore";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { addDoc, collection, type FirestoreError } from "firebase/firestore";
 import { db } from "./firebase";
-import {
-  exchangeSpotifyCode,
-  fetchSpotifyProfile,
-  getSpotifyAuthUrl,
-} from "./spotify";
-import { parseSpotifyHistoryFiles, type SpotifyHistorySummary } from "./spotifyHistory";
-import type { FrequencyCheck, SurveyPayload } from "./types";
+import type { SurveyPayload } from "./types";
 
-type FormState = {
+type Answers = {
   ageRange: string;
-  region: string;
-  gender: string;
-  spotifyConnected: boolean;
-  spotifyPlan: string;
-  topGenres: string[];
-  topArtists: string[];
-  listeningHours: number;
-  workNoiseHours: number;
-  commuteNoiseHours: number;
-  leisureNoiseHours: number;
-  headphoneVolume: number;
-  highVolumeSessions: number;
-  hearingProtectionUsage: number;
-  recentRingingEpisodes: number;
-  recoveryHours: number;
-  qualityToday: number;
-  speechInNoiseDifficulty: number;
-  leftEarDifference: number;
-  tinnitusSeverity: number;
-  soundSensitivity: number;
+  listeningHoursPerDay: number;
+  volumeLevel: number;
   headphoneType: string;
-  environmentNoise: number;
-  notes: string;
+  yearsOfExposure: number;
+  maxFrequency: number;
+  yannyLaurel: string;
+  greenNeedleBrainstorm: string;
 };
 
-const initialState: FormState = {
-  ageRange: "",
-  region: "",
-  gender: "",
-  spotifyConnected: false,
-  spotifyPlan: "",
-  topGenres: [],
-  topArtists: [],
-  listeningHours: 12,
-  workNoiseHours: 0,
-  commuteNoiseHours: 0,
-  leisureNoiseHours: 4,
-  headphoneVolume: 60,
-  highVolumeSessions: 1,
-  hearingProtectionUsage: 50,
-  recentRingingEpisodes: 0,
-  recoveryHours: 4,
-  qualityToday: 75,
-  speechInNoiseDifficulty: 35,
-  leftEarDifference: 10,
-  tinnitusSeverity: 10,
-  soundSensitivity: 20,
-  headphoneType: "over-ear",
-  environmentNoise: 25,
-  notes: "",
-};
+type StoryStep =
+  | "ageRange"
+  | "listeningHoursPerDay"
+  | "volumeLevel"
+  | "headphoneType"
+  | "yearsOfExposure"
+  | "maxFrequency"
+  | "yannyLaurel"
+  | "greenNeedleBrainstorm";
 
-const frequencySteps = [
-  8000, 10000, 12000, 14000, 15000, 16000, 17000, 18000, 19000, 20000,
+const steps: Array<{ id: StoryStep; label: string }> = [
+  { id: "ageRange", label: "Age" },
+  { id: "listeningHoursPerDay", label: "Hours" },
+  { id: "volumeLevel", label: "Volume" },
+  { id: "headphoneType", label: "Headphones" },
+  { id: "yearsOfExposure", label: "Years" },
+  { id: "maxFrequency", label: "Frequency" },
+  { id: "yannyLaurel", label: "Yanny / Laurel" },
+  { id: "greenNeedleBrainstorm", label: "Green Needle / Brainstorm" },
 ];
 
-const sliderClass =
-  "w-full accent-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50";
+const initialAnswers: Answers = {
+  ageRange: "",
+  listeningHoursPerDay: 2,
+  volumeLevel: 65,
+  headphoneType: "",
+  yearsOfExposure: 3,
+  maxFrequency: 15000,
+  yannyLaurel: "",
+  greenNeedleBrainstorm: "",
+};
+
+const choiceGroups = {
+  ageRange: ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
+  headphoneType: ["Earbuds", "Over-ear Headphones", "On-ear/Open-back", "Speakers"],
+  yannyLaurel: ["Yanny", "Laurel"],
+  greenNeedleBrainstorm: ["Green Needle", "Brainstorm"],
+} as const;
+
+const clipSources = {
+  yannyLaurel: "/audio/laurel-yanny.mp3",
+  greenNeedleBrainstorm: "/audio/brainstorm-green-needle.mp3",
+} as const;
 
 function App() {
-  const [form, setForm] = useState<FormState>(initialState);
-  const [frequencyCheck, setFrequencyCheck] = useState<FrequencyCheck>({
-    highestHeardHz: null,
-    headphoneType: initialState.headphoneType,
-    environmentNoise: initialState.environmentNoise,
-  });
-  const [currentTone, setCurrentTone] = useState<number | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [answers, setAnswers] = useState<Answers>(initialAnswers);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [audioHint, setAudioHint] = useState("");
   const [error, setError] = useState("");
-  const [spotifyStatus, setSpotifyStatus] = useState(
-    "Optional: import Spotify genres via API. Use Spotify data export for listening hours.",
-  );
-  const [spotifyHistorySummary, setSpotifyHistorySummary] =
-    useState<SpotifyHistorySummary | null>(null);
-  const [spotifyHistoryStatus, setSpotifyHistoryStatus] = useState(
-    "No Spotify history import yet.",
-  );
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [playingStoryAudio, setPlayingStoryAudio] = useState<StoryStep | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const clipRef = useRef<HTMLAudioElement | null>(null);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const authError = params.get("error");
+  const currentStep = steps[currentIndex]?.id ?? "greenNeedleBrainstorm";
 
-    if (authError) {
-      setSpotifyStatus("Spotify authorization failed. Check the redirect URI in Spotify settings.");
-      window.history.replaceState({}, "", "/");
-      return;
-    }
-
-    if (!code) {
-      return;
-    }
-
-    void (async () => {
-      try {
-        setSpotifyStatus("Importing Spotify profile...");
-        const token = await exchangeSpotifyCode(code);
-        const spotifyData = await fetchSpotifyProfile(token.access_token);
-        setForm((current) => ({
-          ...current,
-          spotifyConnected: true,
-          spotifyPlan: spotifyData.spotifyPlan,
-          topGenres: spotifyData.topGenres,
-          topArtists:
-            current.topArtists.length > 0 ? current.topArtists : spotifyData.topArtists,
-        }));
-        setSpotifyStatus("Spotify genres imported.");
-        window.history.replaceState({}, "", "/");
-      } catch {
-        setSpotifyStatus("Spotify import failed. You can still complete the survey.");
-        window.history.replaceState({}, "", "/");
-      }
-    })();
-  }, []);
+  const summaryRows = useMemo(
+    () => [
+      { label: "Age range", value: answers.ageRange || "Not set" },
+      { label: "Listening", value: `${answers.listeningHoursPerDay} hrs/day` },
+      { label: "Volume", value: `${answers.volumeLevel}%` },
+      { label: "Headphones", value: answers.headphoneType || "Not set" },
+      { label: "Exposure", value: `${answers.yearsOfExposure} years` },
+      { label: "Max frequency", value: `${answers.maxFrequency.toLocaleString()} Hz` },
+      { label: "Yanny / Laurel", value: answers.yannyLaurel || "Not set" },
+      {
+        label: "Green Needle / Brainstorm",
+        value: answers.greenNeedleBrainstorm || "Not set",
+      },
+    ],
+    [answers],
+  );
 
   useEffect(
     () => () => {
-      oscillatorRef.current?.stop();
-      audioContextRef.current?.close().catch(() => undefined);
+      stopAllAudio();
+      void audioContextRef.current?.close();
     },
     [],
   );
 
-  const estimatedWeeklyNoiseDose = useMemo(() => {
-    const exposureHours =
-      form.workNoiseHours + form.commuteNoiseHours + form.leisureNoiseHours;
-    const volumeWeight = form.headphoneVolume / 100;
-    const protectionOffset = 1 - form.hearingProtectionUsage / 100;
-    return Number((exposureHours * (1 + volumeWeight) * (1 + protectionOffset)).toFixed(1));
-  }, [form]);
-
-  const hearingStrainIndex = useMemo(() => {
-    const difficulty =
-      form.speechInNoiseDifficulty * 0.3 +
-      form.tinnitusSeverity * 0.25 +
-      form.soundSensitivity * 0.2 +
-      (100 - form.qualityToday) * 0.25;
-    return Math.round(Math.min(100, difficulty));
-  }, [form]);
-
-  const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((current) => ({ ...current, [key]: value }));
-    if (key === "headphoneType" || key === "environmentNoise") {
-      setFrequencyCheck((current) => ({
-        ...current,
-        [key]: value,
-      }));
-    }
-  };
-
-  const startTone = async (frequency: number) => {
-    try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
+  useEffect(() => {
+    setAudioHint("");
+    void autoPlayForStep(currentStep);
+    return () => {
+      stopClip();
+      if (currentStep !== "maxFrequency") {
+        stopTone();
       }
+    };
+  }, [currentStep]);
 
-      if (audioContextRef.current.state === "suspended") {
-        await audioContextRef.current.resume();
-      }
-
-      oscillatorRef.current?.stop();
-
-      const oscillator = audioContextRef.current.createOscillator();
-      const gain = audioContextRef.current.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.value = frequency;
-      gain.gain.value = 0.03;
-      oscillator.connect(gain);
-      gain.connect(audioContextRef.current.destination);
-      oscillator.start();
-
-      oscillatorRef.current = oscillator;
-      gainRef.current = gain;
-      setCurrentTone(frequency);
-      setIsPlaying(true);
-    } catch {
-      setError("Your browser blocked audio playback. Try again after interacting with the page.");
+  useEffect(() => {
+    if (oscillatorRef.current) {
+      oscillatorRef.current.frequency.value = answers.maxFrequency;
     }
-  };
+  }, [answers.maxFrequency]);
 
   const stopTone = () => {
     oscillatorRef.current?.stop();
     oscillatorRef.current = null;
-    setIsPlaying(false);
+    gainRef.current = null;
   };
 
-  const markAudible = (frequency: number) => {
-    setFrequencyCheck((current) => ({
-      ...current,
-      highestHeardHz:
-        current.highestHeardHz === null
-          ? frequency
-          : Math.max(current.highestHeardHz, frequency),
-    }));
+  const stopClip = () => {
+    if (!clipRef.current) {
+      return;
+    }
+
+    clipRef.current.pause();
+    clipRef.current.currentTime = 0;
+    clipRef.current = null;
+    setPlayingStoryAudio(null);
+  };
+
+  const stopAllAudio = () => {
     stopTone();
+    stopClip();
   };
 
-  const connectSpotify = async () => {
+  const playTone = async () => {
+    stopClip();
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+
+    if (audioContextRef.current.state === "suspended") {
+      await audioContextRef.current.resume();
+    }
+
+    stopTone();
+
+    const oscillator = audioContextRef.current.createOscillator();
+    const gain = audioContextRef.current.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = answers.maxFrequency;
+    gain.gain.value = 0.035;
+    oscillator.connect(gain);
+    gain.connect(audioContextRef.current.destination);
+    oscillator.start();
+
+    oscillatorRef.current = oscillator;
+    gainRef.current = gain;
+  };
+
+  const playClip = async (step: "yannyLaurel" | "greenNeedleBrainstorm") => {
+    stopTone();
+    stopClip();
+
+    const clip = new Audio(clipSources[step]);
+    clipRef.current = clip;
+    setPlayingStoryAudio(step);
+    await clip.play();
+  };
+
+  const autoPlayForStep = async (step: StoryStep) => {
     try {
-      const authUrl = await getSpotifyAuthUrl();
-      window.location.assign(authUrl);
+      if (step === "maxFrequency") {
+        await playTone();
+        return;
+      }
+
+      if (step === "yannyLaurel" || step === "greenNeedleBrainstorm") {
+        await playClip(step);
+      }
     } catch {
-      setSpotifyStatus("Spotify is not configured yet. Add the env vars and retry.");
+      setAudioHint("Audio did not auto-play. Tap play once and it should work from there.");
     }
   };
 
-  const importSpotifyHistory = async (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    setError("");
-
-    try {
-      const summary = await parseSpotifyHistoryFiles(event.target.files);
-      setSpotifyHistorySummary(summary);
-      setSpotifyHistoryStatus(
-        `Imported ${summary.recordCount.toLocaleString()} plays across ${summary.fileCount} file(s).`,
-      );
-      setForm((current) => ({
-        ...current,
-        topArtists: current.topArtists.length > 0 ? current.topArtists : summary.topArtists,
-      }));
-    } catch (importError) {
-      const message =
-        importError instanceof Error
-          ? importError.message
-          : "Spotify history import failed.";
-      setSpotifyHistoryStatus(message);
-    } finally {
-      event.target.value = "";
-    }
+  const goTo = (index: number) => {
+    setCurrentIndex(index);
   };
 
-  const submitSurvey = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
+  const goNext = () => {
+    setCurrentIndex((index) => Math.min(index + 1, steps.length - 1));
+  };
+
+  const goBack = () => {
+    setCurrentIndex((index) => Math.max(index - 1, 0));
+  };
+
+  const setAnswer = <K extends keyof Answers>(key: K, value: Answers[K]) => {
+    setAnswers((current) => ({ ...current, [key]: value }));
+  };
+
+  const chooseAndAdvance = async <K extends keyof Answers>(key: K, value: Answers[K]) => {
+    const nextAnswers = { ...answers, [key]: value };
+    setAnswers(nextAnswers);
+
+    if (currentIndex >= steps.length - 1) {
+      await submitSurvey(nextAnswers);
+      return;
+    }
+
+    goNext();
+  };
+
+  const submitSurvey = async (finalAnswers: Answers = answers) => {
     setSubmitting(true);
+    setError("");
 
     const payload: SurveyPayload = {
       createdAt: new Date().toISOString(),
-      demographics: {
-        ageRange: form.ageRange,
-        region: form.region,
-        gender: form.gender,
-      },
-      spotify: {
-        connected: form.spotifyConnected,
-        topGenres: form.topGenres,
-        topArtists: form.topArtists,
-        spotifyPlan: form.spotifyPlan,
-        importedAt: form.spotifyConnected ? new Date().toISOString() : null,
-        selfReportedListeningHoursPerWeek: form.listeningHours,
-        listeningHoursSource: spotifyHistorySummary ? "spotify_export" : "self_report",
-        importedHistoryFileCount: spotifyHistorySummary?.fileCount ?? null,
-        importedHistoryRecordCount: spotifyHistorySummary?.recordCount ?? null,
-        importedHoursTotal: spotifyHistorySummary?.totalHours ?? null,
-        importedAverageHoursPerWeek:
-          spotifyHistorySummary?.averageHoursPerWeek ?? null,
-        importedHistorySpanDays: spotifyHistorySummary?.spanDays ?? null,
-      },
-      exposure: {
-        workNoiseHoursPerWeek: form.workNoiseHours,
-        commuteNoiseHoursPerWeek: form.commuteNoiseHours,
-        leisureNoiseHoursPerWeek: form.leisureNoiseHours,
-        averageHeadphoneVolume: form.headphoneVolume,
-        weeklyHighVolumeSessions: form.highVolumeSessions,
-        hearingProtectionUsage: form.hearingProtectionUsage,
-        recentRingingEpisodes: form.recentRingingEpisodes,
-        perceivedRecoveryHours: form.recoveryHours,
-      },
-      hearing: {
-        qualityToday: form.qualityToday,
-        speechInNoiseDifficulty: form.speechInNoiseDifficulty,
-        leftEarDifference: form.leftEarDifference,
-        tinnitusSeverity: form.tinnitusSeverity,
-        soundSensitivity: form.soundSensitivity,
-        maxFrequencyCheck: frequencyCheck,
-      },
-      notes: form.notes.trim(),
-      computed: {
-        estimatedWeeklyNoiseDose,
-        hearingStrainIndex,
-      },
+      ageRange: finalAnswers.ageRange,
+      listeningHoursPerDay: finalAnswers.listeningHoursPerDay,
+      volumeLevel: finalAnswers.volumeLevel,
+      headphoneType: finalAnswers.headphoneType,
+      yearsOfExposure: finalAnswers.yearsOfExposure,
+      maxFrequency: finalAnswers.maxFrequency,
+      yannyLaurel: finalAnswers.yannyLaurel,
+      greenNeedleBrainstorm: finalAnswers.greenNeedleBrainstorm,
     };
 
     try {
       await addDoc(collection(db, "surveyResponses"), payload);
       setSubmitted(true);
-      setForm(initialState);
-      setFrequencyCheck({
-        highestHeardHz: null,
-        headphoneType: initialState.headphoneType,
-        environmentNoise: initialState.environmentNoise,
-      });
-      setSpotifyHistorySummary(null);
-      setSpotifyHistoryStatus("No Spotify history import yet.");
-      stopTone();
-    } catch {
-      setError("Submission failed. Check your Firebase config and Firestore rules.");
+      stopAllAudio();
+    } catch (submitError) {
+      const firestoreError = submitError as FirestoreError;
+      setError(
+        firestoreError.code === "permission-denied"
+          ? "Firestore rejected the write with permission-denied."
+          : `Submission failed${firestoreError.code ? `: ${firestoreError.code}` : ""}.`,
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(30,64,175,0.18),transparent_32%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_48%,#ffffff_100%)] px-4 py-10 text-slate-900">
-      <motion.div
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mx-auto w-full max-w-4xl rounded-[2rem] border border-white/70 bg-white/88 p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)] backdrop-blur md:p-8"
-      >
-        <header className="mb-8">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-blue-700">
-            Anonymous survey
-          </p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">
-            Audio habits and hearing quality
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-            This form combines listening patterns, noise exposure, and a lightweight
-            high-frequency hearing check. Spotify API import is optional for genres and
-            artists. Listening hours can be imported from a Spotify data export, because
-            the Web API does not provide total listening time.
-          </p>
-        </header>
-
-        {submitted ? (
-          <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6">
-            <h2 className="text-2xl font-semibold text-emerald-950">Response saved</h2>
-            <p className="mt-2 text-sm text-emerald-800">
-              The submission was stored anonymously. Reload the page to enter another response.
-            </p>
-          </section>
-        ) : (
-          <form className="space-y-8" onSubmit={submitSurvey}>
-            <Section
-              title="Profile"
-              description="Only broad ranges. No name, email, or direct identifier."
-            >
-              <div className="grid gap-4 md:grid-cols-3">
-                <Select
-                  label="Age range"
-                  value={form.ageRange}
-                  onChange={(value) => updateField("ageRange", value)}
-                  options={["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"]}
-                />
-                <Input
-                  label="Region or city"
-                  value={form.region}
-                  onChange={(value) => updateField("region", value)}
-                  placeholder="Singapore"
-                />
-                <Select
-                  label="Gender"
-                  value={form.gender}
-                  onChange={(value) => updateField("gender", value)}
-                  options={["Prefer not to say", "Female", "Male", "Non-binary", "Other"]}
-                />
-              </div>
-            </Section>
-
-            <Section
-              title="Spotify"
-              description="Use the API for genres, and Spotify's exported history JSON for actual listening-time totals."
-            >
-              <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{spotifyStatus}</p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Imported genres: {form.topGenres.length ? form.topGenres.join(", ") : "none"}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={connectSpotify}
-                  className="rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-                >
-                  Connect Spotify
-                </button>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      Spotify listening history import
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">{spotifyHistoryStatus}</p>
-                  </div>
-                  <label className="inline-flex cursor-pointer items-center justify-center rounded-full bg-blue-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600">
-                    Import JSON
-                    <input
-                      type="file"
-                      accept=".json,application/json"
-                      multiple
-                      onChange={(event) => void importSpotifyHistory(event)}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-                <p className="mt-3 text-xs leading-5 text-slate-500">
-                  Accepts Spotify streaming history export files such as
-                  `StreamingHistory_music_*.json` or `endsong_*.json`. This is the
-                  reliable path for listening hours. Spotify does not provide age in its
-                  Web API, so age remains survey-entered.
-                </p>
-              </div>
-
-              {spotifyHistorySummary ? (
-                <div className="grid gap-4 md:grid-cols-3">
-                  <MetricCard
-                    title="Imported total listening"
-                    value={`${spotifyHistorySummary.totalHours} hrs`}
-                    description="Computed from Spotify history files."
-                  />
-                  <MetricCard
-                    title="Average listening per week"
-                    value={`${spotifyHistorySummary.averageHoursPerWeek} hrs`}
-                    description={`Estimated across ${spotifyHistorySummary.spanDays} days of history.`}
-                  />
-                  <MetricCard
-                    title="History records"
-                    value={spotifyHistorySummary.recordCount.toLocaleString()}
-                    description="Playable events parsed from the uploaded files."
-                  />
-                </div>
-              ) : (
-                <RangeField
-                  label="Fallback self-reported listening hours per week"
-                  value={form.listeningHours}
-                  min={0}
-                  max={80}
-                  step={1}
-                  suffix="hrs"
-                  onChange={(value) => updateField("listeningHours", value)}
-                />
-              )}
-            </Section>
-
-            <Section
-              title="Noise exposure"
-              description="These are designed to estimate cumulative weekly strain."
-            >
-              <div className="grid gap-4 md:grid-cols-2">
-                <RangeField
-                  label="Work or school noise exposure"
-                  value={form.workNoiseHours}
-                  min={0}
-                  max={60}
-                  step={1}
-                  suffix="hrs/week"
-                  onChange={(value) => updateField("workNoiseHours", value)}
-                />
-                <RangeField
-                  label="Commute noise exposure"
-                  value={form.commuteNoiseHours}
-                  min={0}
-                  max={30}
-                  step={1}
-                  suffix="hrs/week"
-                  onChange={(value) => updateField("commuteNoiseHours", value)}
-                />
-                <RangeField
-                  label="Concerts, clubs, gaming, tools, or leisure noise"
-                  value={form.leisureNoiseHours}
-                  min={0}
-                  max={30}
-                  step={1}
-                  suffix="hrs/week"
-                  onChange={(value) => updateField("leisureNoiseHours", value)}
-                />
-                <RangeField
-                  label="Typical headphone volume"
-                  value={form.headphoneVolume}
-                  min={0}
-                  max={100}
-                  step={1}
-                  suffix="%"
-                  onChange={(value) => updateField("headphoneVolume", value)}
-                />
-                <RangeField
-                  label="High-volume sessions"
-                  value={form.highVolumeSessions}
-                  min={0}
-                  max={21}
-                  step={1}
-                  suffix="/week"
-                  onChange={(value) => updateField("highVolumeSessions", value)}
-                />
-                <RangeField
-                  label="Hearing protection usage when noise is high"
-                  value={form.hearingProtectionUsage}
-                  min={0}
-                  max={100}
-                  step={5}
-                  suffix="%"
-                  onChange={(value) => updateField("hearingProtectionUsage", value)}
-                />
-                <RangeField
-                  label="Ringing episodes after loud sound"
-                  value={form.recentRingingEpisodes}
-                  min={0}
-                  max={14}
-                  step={1}
-                  suffix="/2 weeks"
-                  onChange={(value) => updateField("recentRingingEpisodes", value)}
-                />
-                <RangeField
-                  label="Hours until hearing feels normal after loud sound"
-                  value={form.recoveryHours}
-                  min={0}
-                  max={72}
-                  step={1}
-                  suffix="hrs"
-                  onChange={(value) => updateField("recoveryHours", value)}
-                />
-              </div>
-
-              <MetricCard
-                title="Estimated weekly noise dose"
-                value={`${estimatedWeeklyNoiseDose}`}
-                description="A simple internal score using hours, volume, and protection."
-              />
-            </Section>
-
-            <Section
-              title="Hearing quality"
-              description="Daily-life impact measures focused on clarity, comfort, and asymmetry."
-            >
-              <div className="grid gap-4 md:grid-cols-2">
-                <RangeField
-                  label="How good does your hearing feel today?"
-                  value={form.qualityToday}
-                  min={0}
-                  max={100}
-                  step={1}
-                  suffix="/100"
-                  onChange={(value) => updateField("qualityToday", value)}
-                />
-                <RangeField
-                  label="Difficulty understanding speech in noise"
-                  value={form.speechInNoiseDifficulty}
-                  min={0}
-                  max={100}
-                  step={1}
-                  suffix="/100"
-                  onChange={(value) => updateField("speechInNoiseDifficulty", value)}
-                />
-                <RangeField
-                  label="Perceived difference between left and right ear"
-                  value={form.leftEarDifference}
-                  min={0}
-                  max={100}
-                  step={1}
-                  suffix="/100"
-                  onChange={(value) => updateField("leftEarDifference", value)}
-                />
-                <RangeField
-                  label="Tinnitus or ringing severity"
-                  value={form.tinnitusSeverity}
-                  min={0}
-                  max={100}
-                  step={1}
-                  suffix="/100"
-                  onChange={(value) => updateField("tinnitusSeverity", value)}
-                />
-                <RangeField
-                  label="Sensitivity to everyday sound"
-                  value={form.soundSensitivity}
-                  min={0}
-                  max={100}
-                  step={1}
-                  suffix="/100"
-                  onChange={(value) => updateField("soundSensitivity", value)}
-                />
-              </div>
-
-              <MetricCard
-                title="Hearing strain index"
-                value={`${hearingStrainIndex}/100`}
-                description="Higher values suggest more day-to-day hearing burden."
-              />
-            </Section>
-
-            <Section
-              title="High-frequency check"
-              description="Use headphones in a quiet room. This is only a rough browser-based self-check, not a medical test."
-            >
-              <div className="grid gap-4 md:grid-cols-3">
-                <Select
-                  label="Headphone type"
-                  value={form.headphoneType}
-                  onChange={(value) => updateField("headphoneType", value)}
-                  options={["over-ear", "on-ear", "in-ear", "speakers"]}
-                />
-                <RangeField
-                  label="Background room noise"
-                  value={form.environmentNoise}
-                  min={0}
-                  max={100}
-                  step={1}
-                  suffix="/100"
-                  onChange={(value) => updateField("environmentNoise", value)}
-                />
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                {frequencySteps.map((frequency) => (
-                  <div
-                    key={frequency}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-slate-900">
-                          {frequency.toLocaleString()} Hz
-                        </p>
-                        <p className="text-xs text-slate-600">
-                          Try this tone and mark it only if clearly audible.
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void startTone(frequency)}
-                          className="rounded-full border border-slate-300 px-3 py-2 text-sm"
-                        >
-                          Play
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => markAudible(frequency)}
-                          disabled={currentTone !== frequency || !isPlaying}
-                          className="rounded-full bg-blue-700 px-3 py-2 text-sm text-white disabled:bg-slate-300"
-                        >
-                          Heard it
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
-                <span>
-                  Highest audible frequency:{" "}
-                  <strong>
-                    {frequencyCheck.highestHeardHz
-                      ? `${frequencyCheck.highestHeardHz.toLocaleString()} Hz`
-                      : "not recorded yet"}
-                  </strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={stopTone}
-                  className="rounded-full border border-blue-200 px-3 py-2"
-                >
-                  Stop tone
-                </button>
-              </div>
-            </Section>
-
-            <Section
-              title="Context"
-              description="Optional notes if there was anything unusual about the test or your hearing this week."
-            >
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-800">
-                  Notes
-                </span>
-                <textarea
-                  value={form.notes}
-                  onChange={(event) => updateField("notes", event.target.value)}
-                  rows={4}
-                  className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white"
-                  placeholder="Recent cold, workplace shift, ears felt blocked, etc."
-                />
-              </label>
-            </Section>
-
-            {error ? <p className="text-sm text-rose-700">{error}</p> : null}
-
-            <div className="flex flex-col gap-3 border-t border-slate-200 pt-6 md:flex-row md:items-center md:justify-between">
-              <p className="max-w-2xl text-sm text-slate-600">
-                No login is required. Firestore should be configured as create-only for this
-                collection, with reads disabled.
-              </p>
+    <main className="min-h-[100dvh] bg-[#0a0a0a] text-white">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-2xl items-center justify-center px-3 py-3 md:px-6 md:py-6">
+        <section className="flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden rounded-[28px] bg-[#111111] p-4 shadow-[0_30px_120px_-50px_rgba(0,0,0,0.9)] md:h-[min(860px,92vh)] md:rounded-[36px] md:p-6">
+          <div className="mb-4 flex items-center gap-1.5">
+            {steps.map((step, index) => (
               <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-full bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
-                {submitting ? "Submitting..." : "Submit anonymously"}
-              </button>
+                key={step.id}
+                type="button"
+                onClick={() => goTo(index)}
+                className={`h-1.5 flex-1 rounded-full transition ${
+                  index <= currentIndex ? "bg-white" : "bg-white/12"
+                }`}
+                aria-label={`Go to ${step.label}`}
+              />
+            ))}
+          </div>
+
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-white/32">
+                Can you hear me?
+              </p>
             </div>
-          </form>
-        )}
-      </motion.div>
+            <p className="text-xs text-white/35">
+              {Math.min(currentIndex + 1, steps.length)} / {steps.length}
+            </p>
+          </div>
+
+          <div className="flex flex-1 items-center justify-center overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentStep}
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -14 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="flex h-full w-full flex-1 flex-col justify-center py-2"
+              >
+                <StoryCard
+                  step={currentStep}
+                  answers={answers}
+                  audioHint={audioHint}
+                  playingStoryAudio={playingStoryAudio}
+                  onBack={goBack}
+                  onNext={goNext}
+                  onSetAnswer={setAnswer}
+                  onChooseAndAdvance={chooseAndAdvance}
+                  onReplayClip={(step) => void playClip(step)}
+                  onSubmit={() => void submitSurvey()}
+                  submitted={submitted}
+                  submitting={submitting}
+                  error={error}
+                  summaryRows={summaryRows}
+                />
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
 
-function Section({
+function StoryCard({
+  step,
+  answers,
+  audioHint,
+  playingStoryAudio,
+  onBack,
+  onNext,
+  onSetAnswer,
+  onChooseAndAdvance,
+  onReplayClip,
+  onSubmit,
+  submitted,
+  submitting,
+  error,
+  summaryRows,
+}: {
+  step: StoryStep;
+  answers: Answers;
+  audioHint: string;
+  playingStoryAudio: StoryStep | null;
+  onBack: () => void;
+  onNext: () => void;
+  onSetAnswer: <K extends keyof Answers>(key: K, value: Answers[K]) => void;
+  onChooseAndAdvance: <K extends keyof Answers>(key: K, value: Answers[K]) => Promise<void>;
+  onReplayClip: (step: "yannyLaurel" | "greenNeedleBrainstorm") => void;
+  onSubmit: () => void;
+  submitted: boolean;
+  submitting: boolean;
+  error: string;
+  summaryRows: Array<{ label: string; value: string }>;
+}) {
+  if (submitted || submitting) {
+    return (
+      <div className="flex flex-1 flex-col justify-center">
+        <h2 className="text-3xl font-semibold tracking-tight text-white md:text-5xl">
+          {submitted ? "Done" : "Saving..."}
+        </h2>
+        <p className="mt-4 max-w-xl text-base leading-7 text-white/55">
+          {submitted
+            ? "Your response has been saved."
+            : "Submitting your response now."}
+        </p>
+        {!submitted && !submitting ? (
+          <div className="mt-8 space-y-2 text-sm text-white/42">
+            {summaryRows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between gap-4">
+                <span>{row.label}</span>
+                <span className="text-white/78">{row.value}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {error ? <p className="mt-5 text-sm text-rose-400">{error}</p> : null}
+        {!submitted && !submitting ? (
+          <div className="mt-8 flex flex-wrap gap-3">
+            <ActionButton tone="ghost" onClick={onBack}>
+              Back
+            </ActionButton>
+            <ActionButton tone="primary" onClick={onSubmit} disabled={submitting}>
+              {submitting ? "Submitting..." : "Submit survey"}
+            </ActionButton>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (step === "ageRange") {
+    return (
+      <QuestionShell
+        title="How old are you?"
+        description="Pick the closest range."
+      >
+        <ChoiceGrid
+          options={choiceGroups.ageRange}
+          value={answers.ageRange}
+          onSelect={(value) => onChooseAndAdvance("ageRange", value)}
+        />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "listeningHoursPerDay") {
+    return (
+      <QuestionShell
+        title="How much music do you listen to in a day?"
+        description="Use your usual average."
+      >
+        <SliderBlock
+          value={answers.listeningHoursPerDay}
+          min={0}
+          max={12}
+          step={0.25}
+          suffix="hrs/day"
+          onChange={(value) => onSetAnswer("listeningHoursPerDay", value)}
+        />
+        <FooterNav onBack={onBack} onNext={onNext} />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "volumeLevel") {
+    return (
+      <QuestionShell
+        title="How loud do you usually listen?"
+        description="Think about your normal level."
+      >
+        <SliderBlock
+          value={answers.volumeLevel}
+          min={0}
+          max={100}
+          step={1}
+          suffix="%"
+          onChange={(value) => onSetAnswer("volumeLevel", value)}
+        />
+        <FooterNav onBack={onBack} onNext={onNext} />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "headphoneType") {
+    return (
+      <QuestionShell
+        title="What do you usually listen with?"
+        description="Pick the closest match."
+      >
+        <ChoiceGrid
+          options={choiceGroups.headphoneType}
+          value={answers.headphoneType}
+          onSelect={(value) => onChooseAndAdvance("headphoneType", value)}
+        />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "yearsOfExposure") {
+    return (
+      <QuestionShell
+        title="How long has that been your normal?"
+        description="Count the years of roughly similar habits."
+      >
+        <SliderBlock
+          value={answers.yearsOfExposure}
+          min={0}
+          max={40}
+          step={1}
+          suffix="years"
+          onChange={(value) => onSetAnswer("yearsOfExposure", value)}
+        />
+        <FooterNav onBack={onBack} onNext={onNext} />
+      </QuestionShell>
+    );
+  }
+
+  if (step === "maxFrequency") {
+    return (
+      <QuestionShell
+        title="Slide until you can't hear it"
+        description="Put your device at max volume first, then stop where it disappears."
+      >
+        <div className="mb-5 inline-flex w-fit items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70">
+          <VolumeIcon />
+          <span>Max volume</span>
+        </div>
+        <SliderBlock
+          value={answers.maxFrequency}
+          min={8000}
+          max={20000}
+          step={100}
+          suffix="Hz"
+          onChange={(value) => onSetAnswer("maxFrequency", value)}
+        />
+        {audioHint ? <p className="mt-4 text-sm text-amber-300">{audioHint}</p> : null}
+        <div className="mt-6 flex flex-wrap gap-3">
+          <ActionButton tone="ghost" onClick={onBack}>
+            Back
+          </ActionButton>
+          <ActionButton tone="primary" onClick={onNext}>
+            This is my limit
+          </ActionButton>
+        </div>
+      </QuestionShell>
+    );
+  }
+
+  if (step === "yannyLaurel") {
+    return (
+      <QuestionShell
+        title="What do you hear?"
+        description="The clip should start automatically."
+      >
+        {audioHint ? <p className="mb-4 text-sm text-amber-300">{audioHint}</p> : null}
+        <div className="grid gap-3 md:grid-cols-2">
+          {choiceGroups.yannyLaurel.map((option) => (
+            <AnswerButton
+              key={option}
+              label={option}
+              active={answers.yannyLaurel === option}
+              onClick={() => onChooseAndAdvance("yannyLaurel", option)}
+            />
+          ))}
+        </div>
+        <div className="mt-6">
+          <ActionButton tone="soft" onClick={() => onReplayClip("yannyLaurel")}>
+            Replay audio
+          </ActionButton>
+        </div>
+      </QuestionShell>
+    );
+  }
+
+  return (
+    <QuestionShell
+      title="And this one?"
+      description="The clip should start automatically."
+    >
+      {audioHint ? <p className="mb-4 text-sm text-amber-300">{audioHint}</p> : null}
+      <div className="grid gap-3 md:grid-cols-2">
+        {choiceGroups.greenNeedleBrainstorm.map((option) => (
+          <AnswerButton
+            key={option}
+            label={option}
+            active={answers.greenNeedleBrainstorm === option}
+            onClick={() => onChooseAndAdvance("greenNeedleBrainstorm", option)}
+          />
+        ))}
+      </div>
+      <div className="mt-6">
+        <ActionButton tone="soft" onClick={() => onReplayClip("greenNeedleBrainstorm")}>
+          Replay audio
+        </ActionButton>
+      </div>
+    </QuestionShell>
+  );
+}
+
+function QuestionShell({
   title,
   description,
   children,
 }: {
   title: string;
   description: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{title}</h2>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
-      </div>
-      <div className="space-y-4">{children}</div>
-    </section>
+    <div className="flex flex-1 flex-col justify-center">
+      <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-white md:text-5xl">
+        {title}
+      </h2>
+      <p className="mt-3 max-w-lg text-base leading-7 text-white/52">{description}</p>
+      <div className="mt-8">{children}</div>
+    </div>
   );
 }
 
-function Select({
-  label,
-  value,
-  onChange,
+function ChoiceGrid({
   options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: string[];
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-800">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white"
-        required
-      >
-        <option value="">Select</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function Input({
-  label,
   value,
-  onChange,
-  placeholder,
+  onSelect,
 }: {
-  label: string;
+  options: readonly string[];
   value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
+  onSelect: (value: string) => void;
 }) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-800">{label}</span>
-      <input
-        type="text"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white"
-        required
-      />
-    </label>
+    <div className="grid gap-3 md:grid-cols-2">
+      {options.map((option) => (
+        <AnswerButton
+          key={option}
+          label={option}
+          active={value === option}
+          onClick={() => onSelect(option)}
+        />
+      ))}
+    </div>
   );
 }
 
-function RangeField({
-  label,
+function SliderBlock({
   value,
   min,
   max,
@@ -811,7 +600,6 @@ function RangeField({
   suffix,
   onChange,
 }: {
-  label: string;
   value: number;
   min: number;
   max: number;
@@ -820,41 +608,114 @@ function RangeField({
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="block rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <span className="text-sm font-medium text-slate-800">{label}</span>
-        <span className="text-sm text-slate-600">
-          {value} {suffix}
+    <div>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <span className="text-2xl font-semibold text-white">
+          {Number.isInteger(value) ? value.toLocaleString() : value} {suffix}
         </span>
       </div>
       <input
         type="range"
-        value={value}
         min={min}
         max={max}
         step={step}
+        value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className={sliderClass}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/12 accent-white"
       />
-    </label>
+      <div className="mt-3 flex items-center justify-between text-xs uppercase tracking-[0.18em] text-white/28">
+        <span>{min.toLocaleString()}</span>
+        <span>{max.toLocaleString()}</span>
+      </div>
+    </div>
   );
 }
 
-function MetricCard({
-  title,
-  value,
-  description,
+function FooterNav({
+  onBack,
+  onNext,
 }: {
-  title: string;
-  value: string;
-  description: string;
+  onBack: () => void;
+  onNext: () => void;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4">
-      <p className="text-sm text-slate-600">{title}</p>
-      <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
-      <p className="mt-2 text-sm text-slate-500">{description}</p>
+    <div className="mt-6 flex flex-wrap gap-3">
+      <ActionButton tone="ghost" onClick={onBack}>
+        Back
+      </ActionButton>
+      <ActionButton tone="primary" onClick={onNext}>
+        Continue
+      </ActionButton>
     </div>
+  );
+}
+
+function AnswerButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-[22px] border px-5 py-5 text-left text-base font-medium transition md:px-6 md:py-6 ${
+        active
+          ? "border-white bg-white text-black"
+          : "border-white/10 bg-white/4 text-white hover:border-white/30 hover:bg-white/8"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ActionButton({
+  children,
+  onClick,
+  tone,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  tone: "primary" | "ghost" | "soft";
+  disabled?: boolean;
+}) {
+  const className =
+    tone === "primary"
+      ? "bg-white text-black hover:bg-white/90"
+      : tone === "soft"
+        ? "bg-white/8 text-white hover:bg-white/12"
+        : "border border-white/14 bg-transparent text-white hover:bg-white/6";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-full px-5 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function VolumeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-4 w-4 fill-none stroke-current"
+      strokeWidth="1.8"
+    >
+      <path d="M3 10v4h4l5 4V6L7 10H3Z" />
+      <path d="M16 9a5 5 0 0 1 0 6" />
+      <path d="M18.5 6.5a8.5 8.5 0 0 1 0 11" />
+    </svg>
   );
 }
 
